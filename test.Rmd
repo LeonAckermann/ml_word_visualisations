@@ -1,0 +1,21 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## using LDA model of textmineR
+- mallet will be supported later
+- data is private therefore not included in repository
+
+```{r}
+source("./lda.R")
+test <- get_topic_test(model_type = "textmineR",
+                       num_topics = 150,
+                       num_top_words = 5,
+                       data_column = "wor_text",
+                       diagnose_column = "miniGAD_diagnose",
+                       save_dir = "./wor_text_textmineR_150",
+                       load_dir = NULL)
+
+view(test)
+```

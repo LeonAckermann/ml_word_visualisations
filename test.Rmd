@@ -8,14 +8,16 @@ output: html_notebook
 - data is private therefore not included in repository
 
 ```{r}
-source("./lda.R")
-test <- get_topic_test(model_type = "textmineR",
+source("./lda/main.R")
+test <- get_topic_test(model_type = "mallet",
                        num_topics = 150,
                        num_top_words = 5,
-                       data_column = "wor_text",
-                       diagnose_column = "miniGAD_diagnose",
-                       save_dir = "./wor_text_textmineR_150",
-                       load_dir = NULL)
-
+                       data_dir = "response_format_cleaned_ds1.csv",
+                       id_column = "participant_id",
+                       data_column = "dep_all_phraces",
+                       diagnose_column = "minidep_diagnose",
+                       save=TRUE,
+                       load=FALSE,
+                       seed=1)
 view(test)
 ```

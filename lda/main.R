@@ -5,8 +5,197 @@ library(rJava)
 library(tokenizers)
 source("./lda/utils.R")
 library(text2vec)
+library(dplyr)
 
-# Calculate coherence score
+
+
+get_dtm <- function(data_dir, # provide relative directory path to data
+                    id_col,
+                    data_col,
+                    group_var,
+                    ngram_window,
+                    stopwords,
+                    split,
+                    seed){
+  set.seed(seed)
+  
+  # Data
+  text <- read.csv(data_dir) #load data
+  text_cols= text[c(id_col,data_col,group_var)] # select columns
+  text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
+  text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
+  split_index <- round(nrow(text_cols) * split) 
+  train <- text_cols[1:split_index, ] # split training set
+  test <- text_cols[split_index:nrow(text_cols), ] # split test set
+  # Calculate counts and ratios for the training set
+  train_counts <- table(train[c(group_var)])
+  train_ratio_0 <- train_counts[1] / sum(train_counts)
+  train_ratio_1 <- train_counts[2] / sum(train_counts)
+  
+  # Calculate counts and ratios for the test set
+  test_counts <- table(test[c(group_var)])
+  test_ratio_0 <- test_counts[1] / sum(test_counts)
+  test_ratio_1 <- test_counts[2] / sum(test_counts)
+  
+  # Create a DataFrame
+  result_df <- data.frame(
+    Set = c("Training", "Test"),
+    Count_0 = c(train_counts[1], test_counts[1]),
+    Count_1 = c(train_counts[2], test_counts[2]),
+    Ratio_0 = c(train_ratio_0, test_ratio_0),
+    Ratio_1 = c(train_ratio_1, test_ratio_1)
+  )
+  
+  # create a document term matrix for training set
+  train_dtm <- CreateDtm(doc_vec = train[[data_col]], # character vector of documents
+                   doc_names = train[[id_col]], # document names
+                   ngram_window = ngram_window, # minimum and maximum n-gram length
+                   stopword_vec = stopwords::stopwords("en", source = "snowball"),
+                   lower = TRUE, # lowercase - this is the default value
+                   remove_punctuation = TRUE, # punctuation - this is the default
+                   remove_numbers = TRUE, # numbers - this is the default
+                   verbose = FALSE, # Turn off status bar for this demo
+                   cpus = 4) # default is all available cpus on the system
+  train_dtm <- train_dtm[,colSums(train_dtm) > 2] # remove words with occurences < 2
+  
+  # create a document term matrix for test set
+  test_dtm <- CreateDtm(doc_vec = test[[data_col]], # character vector of documents
+                         doc_names = test[[id_col]], # document names
+                         ngram_window = ngram_window, # minimum and maximum n-gram length
+                         stopword_vec = stopwords::stopwords("en", source = "snowball"),
+                         lower = TRUE, # lowercase - this is the default value
+                         remove_punctuation = TRUE, # punctuation - this is the default
+                         remove_numbers = TRUE, # numbers - this is the default
+                         verbose = FALSE, # Turn off status bar for this demo
+                         cpus = 4) # default is all available cpus on the system
+  test_dtm <- test_dtm[,colSums(test_dtm) > 2] # remove words with occurences < 2
+  
+  
+  return(list(train_dtm=train_dtm, test_dtm=test_dtm, split_stats=result_df))
+}
+
+get_lda_model <- function(model_type,
+                          dtm,
+                          num_topics,
+                          num_top_words,
+                          seed,
+                          save_dir=NULL,
+                          load_dir=NULL){
+  set.seed(seed)
+  if (!is.null(load_dir)){
+    model <- readRDS(paste0(load_dir, "/seed_", seed, "/model.rds"))
+  } else {
+    if (model_type == "textmineR"){
+      model <- get_textmineR_model(dtm = dtm,
+                                   num_topics = num_topics,
+                                   num_top_words = num_top_words)
+    } else {
+      model <- get_mallet_model(dtm = dtm,
+                                num_topics = num_topics,
+                                num_top_words = num_top_words)
+    }
+    
+    model$summary <- data.frame(topic = rownames(model$labels),
+                                label = model$labels,
+                                coherence = round(model$coherence, 3),
+                                prevalence = round(model$prevalence,3),
+                                top_terms = apply(model$top_terms, 
+                                                  2, 
+                                                  function(x){paste(x, collapse = ", ")}),
+                                stringsAsFactors = FALSE)
+    model$summary[order(model$summary$prevalence, decreasing = TRUE) , ][ 1:10 , ]
+  }
+  
+  if (!is.null(save_dir)){
+    if (!dir.exists(save_dir)) {
+      # Create the directory
+      dir.create(save_dir)
+      cat("Directory created successfully.\n")
+    } 
+    if(!dir.exists(paste0(save_dir, "/seed_", seed))){
+      dir.create(paste0(save_dir, "/seed_", seed))
+    }
+    saveRDS(model, paste0(save_dir, "/seed_", seed, "/model.rds"))
+  }
+  
+  return(model)
+}
+
+get_lda_preds <- function(model, # only needed if load_dir==NULL 
+                          num_iterations, # only needed if load_dir==NULL
+                          data_dir, # only needed if load_dir==NULL
+                          dtm, # only needed if load_dir==NULL
+                          group_var, # only needed if load_dir==NULL
+                          seed,
+                          save_dir=NULL,
+                          load_dir=NULL){
+  set.seed(seed)
+  if (!is.null(load_dir)){
+    preds <- readRDS(paste0(load_dir, "/seed_", seed, "/preds.rds"))
+  } else {
+    #data <- read.csv(paste0("./data/", data_dir))
+    preds <- predict(model,
+                     dtm,
+                     method = "gibbs",
+                     iterations = num_iterations,
+                     burnin = 180,
+                     cpus = 4)
+    preds <- as_tibble(preds)
+    colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
+    categories <- data[c(group_var)]
+    preds <- bind_cols(categories, preds)
+    preds <- preds %>% tibble()
+
+  }
+  
+  if (!is.null(save_dir)){
+    if (!dir.exists(save_dir)) {
+      # Create the directory
+      dir.create(save_dir)
+      cat("Directory created successfully.\n")
+    } 
+    if(!dir.exists(paste0(save_dir, "/seed_", seed))){
+      dir.create(paste0(save_dir, "/seed_", seed))
+    }
+    saveRDS(model, paste0(save_dir, "/seed_", seed, "/preds.rds"))
+  }
+  
+  return(preds)
+}
+
+get_lda_test <- function(model, # only needed if load_dir==NULL
+                         preds, # only needed if load_dir==NULL
+                         group_var,
+                         test_method,
+                         seed,
+                         load_dir=NULL,
+                         save_dir=NULL){
+  if (!is.null(load_dir)){
+    test <- readRDS(paste0(load_dir, "/seed_", seed, "/test.rds"))
+  } else {
+    test <- topic_test(topic_terms = model$summary,
+                       topics_loadings = preds,
+                       grouping_variable = preds[group_var],
+                       test_method = "t-test",
+                       split = "median",
+                       n_min_max = 20,
+                       multiple_comparison = "fdr")
+  }
+  
+  if (save){
+    if (!dir.exists(save_dir)) {
+      # Create the directory
+      dir.create(save_dir)
+      cat("Directory created successfully.\n")
+    } else {
+      cat("Directory already exists.\n")
+    }
+    if(!dir.exists(paste0(save_dir, "/seed_", seed))){
+      dir.create(paste0(save_dir, "/seed_", seed))
+    }
+    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test.rds"))
+  }
+}
 
 get_mallet_model <- function(dtm,
                              num_topics,
@@ -69,8 +258,8 @@ get_mallet_model <- function(dtm,
   
   # take the first word as dummy label, no other solution worked
   first_row <- return_model$top_terms_mallet[1,]
-  return_model$labels <- matrix(first_row, nrow = 150, ncol = 1)
-  rownames(return_model$labels) <- paste0("t_", 1:150)
+  return_model$labels <- matrix(first_row, nrow = num_topics, ncol = 1)
+  rownames(return_model$labels) <- paste0("t_", 1:num_topics)
   colnames(return_model$labels) <- "label_1"
   #return(c(result1 = result1, result2 = result2))
   
@@ -82,8 +271,10 @@ get_mallet_model <- function(dtm,
   names(pred_model)
   class(pred_model) <- "lda_topic_model"
 
-
-  return(list(pred_model = pred_model, return_model=return_model))
+  return_modelL$pred_model <- pred_model
+  
+  #return(list(pred_model = pred_model, return_model=return_model))
+  return(return_model)
 }
 
 get_textmineR_model <- function(dtm,
@@ -107,6 +298,8 @@ get_textmineR_model <- function(dtm,
   return(model)
 
 } 
+
+
 
 get_topic_test <- function(model_type,
                            num_topics,
@@ -138,7 +331,7 @@ get_topic_test <- function(model_type,
                    verbose = FALSE, # Turn off status bar for this demo
                    cpus = 4) # default is all available cpus on the system
   dtm <- dtm[,colSums(dtm) > 2] # remove words with occurences < 2
-  
+  view(dtm)
   if (load){
     if (model_type == "textmineR"){
       model <- readRDS(paste0(load_dir, "/seed_", seed, "/model.rds"))

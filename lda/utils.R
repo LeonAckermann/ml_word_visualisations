@@ -180,6 +180,7 @@ topics_t_test_grouping <- function(topics_loadings,
 
     # Adjust p-value if more than two categories
     groupings <- unique(topics_loadings$value)
+    view(length(groupings))
     if (length(groupings) > 1) {
       results <- map(results, ~ c(.x, adjust.p.value = stats::p.adjust(
         .x$t_test$p.value,
@@ -300,15 +301,14 @@ sort_stats_tibble <- function(df) {
 #' @param multiple_comparison (string) The p-correction method
 #' @importFrom dplyr select everything
 #' @return Results
-topic_test <- function(
-    topic_terms,
-    topics_loadings,
-    grouping_variable,
-    test_method = "correlation",
-    split = "median",
-    n_min_max = 20,
-    multiple_comparison = "bonferroni"
-){
+topic_test <- function(topic_terms,
+                       topics_loadings,
+                       grouping_variable,
+                       control_vars,
+                       test_method = "correlation",
+                       split = "median",
+                       n_min_max = 20,
+                       multiple_comparison = "bonferroni"){
   require(stats)
   require(purrr)
   require(dplyr)
@@ -378,6 +378,7 @@ topic_test <- function(
 #      con_cat_grouping <- "con"}else{con_cat_grouping <- "cat"}
 #  }
 #
+
 
   if (test_method == "correlation"){
 
@@ -464,7 +465,142 @@ topic_test <- function(
     })
     names(output_list) <- names(result)
 
-    return (output_list)}
+    return (output_list)
+  }
+  if (test_method == "linear_regression" | test_method == "logistic_regression"){
+    # still get number of topics automatically
+    num_topics <- nrow(topic_terms)
+    lda_topics <- character(num_topics)
+    # Create the list of LDA topics
+    for (i in 1:num_topics) {
+      lda_topics[i] <- paste("t_", i, sep = "")
+    }
+    
+    view(preds)
+    
+    preds <- topics_loadings # load topics_loading into different variable to reduce naming errors
+    for (topic in lda_topics) {
+      preds[[paste0("z_",topic)]] <- scale(preds[[topic]])
+    }
+    
+    control_variables <- control_vars
+    for (variable in control_variables){
+      preds[[paste0("z_",variable)]] <- scale(preds[[variable]])
+    }
+    
+    # Initialize an empty list to store the topic names
+    z_lda_topics <- character(num_topics)
+    for (i in 1:num_topics) {
+      z_lda_topics[i] <- paste0("z_t_", i)
+    }
+    # Loop through each LDA topic and create a linear model
+    multi_models <- list()
+   
+    preds[is.na(preds)] <- 0
+    
+    view(preds)
+    
+    if (test_method == "linear_regression"){
+      
+      formula_tail <- "~"
+      for (variable in control_variables){
+        formula_tail <- paste0(formula_tail, " + z_", variable)
+      }
+      
+      
+      for (topic in z_lda_topics) {
+        formula <- as.formula(paste0(topic, formula_tail))
+        multi_models[[paste0("t_",topic)]] <- lm(formula, data = preds)
+      }
+    } 
+    
+    print(preds)
+    print(test_method)
+    if (test_method == "logistic_regression"){
+      print(control_variables[1])
+      print(z_lda_topics[1])
+      for (topic in z_lda_topics){
+        
+        multi_models[[paste0("t_", topic)]] <- glm(paste0("z_",control_variables[1], " ~ ", topic), data = preds)
+      }
+    }
+    
+    
+    #print(multi_models)
+    print(length(multi_models))
+    
+    control_variable_summary <- list()
+    topics <- c()
+    if (test_method=="linear_regression"){
+      for (variable in control_variables){
+        control_variable_summary[[variable]] <- list()
+        control_variable_summary[[variable]][["estimate"]] <- c()
+        control_variable_summary[[variable]][["t"]] <- c()
+        control_variable_summary[[variable]][["p"]] <- c()
+        control_variable_summary[[variable]][["p_adjusted"]] <- c()
+      }
+    }
+    if (test_method=="logistic_regression"){
+      control_variable_summary[["estimate"]] <- c()
+      control_variable_summary[["t"]] <- c()
+      control_variable_summary[["p"]] <- c()
+      control_variable_summary[["p_adjusted"]] <- c()
+    }
+    
+    for (i in 1:length(multi_models)){
+      temp <- multi_models[[i]]
+      p_values <- summary(temp)$coefficients[, "Pr(>|t|)"]
+      t_values <- summary(temp)$coefficients[, "t value"]
+      estimate_values <- summary(temp)$coefficients[, "Estimate"]
+      topics <- c(topics, paste0("t",i))
+      if (test_method == "linear_regression"){
+        for (variable in control_variables){
+          control_variable_summary[[variable]][["estimate"]] <- c(control_variable_summary[[variable]][["estimate"]],
+                                                                  estimate_values[[paste0("z_", variable)]])
+          control_variable_summary[[variable]][["t"]] <- c(control_variable_summary[[variable]][["t"]],
+                                                           t_values[[paste0("z_",variable)]])
+          control_variable_summary[[variable]][["p"]] <- c(control_variable_summary[[variable]][["p"]],
+                                                           p_values[[paste0("z_", variable)]])
+        }
+      }
+      if (test_method == "logistic_regression"){
+        control_variable_summary[["estimate"]] <- c(control_variable_summary[["estimate"]],
+                                                                  estimate_values[[paste0("z_t_",i )]])
+        control_variable_summary[["t"]] <- c(control_variable_summary[["t"]],
+                                                           t_values[[paste0("z_t_",i)]])
+        control_variable_summary[["p"]] <- c(control_variable_summary[["p"]],
+                                                           p_values[[paste0("z_t_",i )]])
+      }
+    
+    }
+    
+    if (test_method == "linear_regression"){
+      for (variable in control_variables){
+        p_adjusted <- stats::p.adjust(control_variable_summary[[variable]][["p"]],
+                                      "bonferroni",
+                                      length(multi_models))
+        control_variable_summary[[variable]][["p_adjusted"]] <- c(control_variable_summary[[variable]][["p_adjusted"]],
+                                                                  p_adjusted)
+      }
+    }
+    if (test_method == "logistic_regression"){
+      p_adjusted <- stats::p.adjust(control_variable_summary[["p"]],
+                                    "bonferroni",
+                                    length(multi_models))
+      control_variable_summary[["p_adjusted"]] <- c(control_variable_summary[["p_adjusted"]],
+                                                                p_adjusted)
+    }
+    
+    #return (control_variable_summary)
+    control_variable_summary$topic <- lda_topics
+
+    output <- right_join(topic_terms[c("topic", "top_terms")], data.frame(control_variable_summary), by = join_by(topic))
+    # add the adjustment for bonferroni
+    return(output)    
+    
+    
+  }
+  
 }
 
 

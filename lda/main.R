@@ -6,6 +6,7 @@ library(tokenizers)
 source("./lda/utils.R")
 library(text2vec)
 library(dplyr)
+library(quanteda)
 
 
 
@@ -15,18 +16,30 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                     group_var,
                     ngram_window,
                     stopwords,
+                    removalword,
                     split,
                     seed){
   set.seed(seed)
   
   # Data
-  text <- read.csv(data_dir) #load data
-  text_cols= text[c(id_col,data_col,group_var)] # select columns
+  text <- readRDS(data_dir) #load data
+  text_cols= text[c(id_col,data_col,group_var,"Sex", "age", "current_score")] #, "minidep_scale", "miniGAD_scale")] # select columns
   text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
+  
   split_index <- round(nrow(text_cols) * split) 
   train <- text_cols[1:split_index, ] # split training set
-  test <- text_cols[split_index:nrow(text_cols), ] # split test set
+  if (split<1){
+    test <- text_cols[split_index:nrow(text_cols), ] # split test set
+  } else {
+    test <- train
+  }
+  
+  if (removalword != ""){
+    train[[data_col]] <- gsub(paste0("\\b", removalword, "\\b"), "", train[[data_col]]) 
+    
+  }
+  
   # Calculate counts and ratios for the training set
   train_counts <- table(train[c(group_var)])
   train_ratio_0 <- train_counts[1] / sum(train_counts)
@@ -56,8 +69,10 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                    remove_numbers = TRUE, # numbers - this is the default
                    verbose = FALSE, # Turn off status bar for this demo
                    cpus = 4) # default is all available cpus on the system
-  train_dtm <- train_dtm[,colSums(train_dtm) > 2] # remove words with occurences < 2
+
   
+  train_dtm <- train_dtm[,colSums(train_dtm) > 2] # remove words with occurences < 2
+  #train_dtm <- dfm_trim(train_dtm, c("family", "families"))
   # create a document term matrix for test set
   test_dtm <- CreateDtm(doc_vec = test[[data_col]], # character vector of documents
                          doc_names = test[[id_col]], # document names
@@ -71,13 +86,14 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   test_dtm <- test_dtm[,colSums(test_dtm) > 2] # remove words with occurences < 2
   
   
-  return(list(train_dtm=train_dtm, test_dtm=test_dtm, split_stats=result_df))
+  return(list(train_dtm=train_dtm, test_dtm=test_dtm, train_data=train, test_data=test,split_stats=result_df))
 }
 
 get_lda_model <- function(model_type,
                           dtm,
                           num_topics,
                           num_top_words,
+                          num_iterations,
                           seed,
                           save_dir=NULL,
                           load_dir=NULL){
@@ -88,11 +104,13 @@ get_lda_model <- function(model_type,
     if (model_type == "textmineR"){
       model <- get_textmineR_model(dtm = dtm,
                                    num_topics = num_topics,
-                                   num_top_words = num_top_words)
+                                   num_top_words = num_top_words,
+                                   num_iterations = num_iterations)
     } else {
       model <- get_mallet_model(dtm = dtm,
                                 num_topics = num_topics,
-                                num_top_words = num_top_words)
+                                num_top_words = num_top_words,
+                                num_iterations = num_iterations)
     }
     
     model$summary <- data.frame(topic = rownames(model$labels),
@@ -122,9 +140,9 @@ get_lda_model <- function(model_type,
 }
 
 get_lda_preds <- function(model, # only needed if load_dir==NULL 
-                          num_iterations, # only needed if load_dir==NULL
-                          data_dir, # only needed if load_dir==NULL
+                          num_iterations, # only needed if load_dir==NULL, 
                           dtm, # only needed if load_dir==NULL
+                          data,
                           group_var, # only needed if load_dir==NULL
                           seed,
                           save_dir=NULL,
@@ -134,7 +152,7 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     preds <- readRDS(paste0(load_dir, "/seed_", seed, "/preds.rds"))
   } else {
     #data <- read.csv(paste0("./data/", data_dir))
-    preds <- predict(model,
+    preds <- predict(model$pred_model,
                      dtm,
                      method = "gibbs",
                      iterations = num_iterations,
@@ -142,7 +160,8 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
                      cpus = 4)
     preds <- as_tibble(preds)
     colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
-    categories <- data[c(group_var)]
+    categories <- data[group_var]
+    view(categories)
     preds <- bind_cols(categories, preds)
     preds <- preds %>% tibble()
 
@@ -163,9 +182,10 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
   return(preds)
 }
 
-get_lda_test <- function(model, # only needed if load_dir==NULL
-                         preds, # only needed if load_dir==NULL
+get_lda_test <- function(model,
+                         preds, 
                          group_var,
+                         control_vars,
                          test_method,
                          seed,
                          load_dir=NULL,
@@ -176,13 +196,14 @@ get_lda_test <- function(model, # only needed if load_dir==NULL
     test <- topic_test(topic_terms = model$summary,
                        topics_loadings = preds,
                        grouping_variable = preds[group_var],
-                       test_method = "t-test",
+                       control_vars = control_vars,
+                       test_method = test_method,
                        split = "median",
                        n_min_max = 20,
                        multiple_comparison = "fdr")
   }
   
-  if (save){
+  if (!is.null(save_dir)){
     if (!dir.exists(save_dir)) {
       # Create the directory
       dir.create(save_dir)
@@ -195,11 +216,13 @@ get_lda_test <- function(model, # only needed if load_dir==NULL
     }
     saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test.rds"))
   }
+  return(test)
 }
 
 get_mallet_model <- function(dtm,
                              num_topics,
-                             num_top_words){
+                             num_top_words, 
+                             num_iterations){
   # still to complete
   docs <- Dtm2Docs(dtm)
   model <- MalletLDA(num.topics = num_topics,
@@ -211,7 +234,7 @@ get_mallet_model <- function(dtm,
                              preserve.case = FALSE,
                              token.regexp= "[\\p{L}\\p{N}_]+|[\\p{P}]+\ ")
   model$loadDocuments(instances)
-  model$train(500)
+  model$train(num_iterations)
   topic.words <- mallet.topic.words(model,
                                     smoothed=TRUE,
                                     normalized=TRUE)
@@ -271,7 +294,7 @@ get_mallet_model <- function(dtm,
   names(pred_model)
   class(pred_model) <- "lda_topic_model"
 
-  return_modelL$pred_model <- pred_model
+  return_model$pred_model <- pred_model
   
   #return(list(pred_model = pred_model, return_model=return_model))
   return(return_model)
@@ -279,10 +302,11 @@ get_mallet_model <- function(dtm,
 
 get_textmineR_model <- function(dtm,
                                 num_topics,
-                                num_top_words){
+                                num_top_words,
+                                num_iterations){
   model <- FitLdaModel(dtm = dtm,
                        k = num_topics,
-                       iterations = 500, # I usually recommend at least 500 iterations or more
+                       iterations = num_iterations, # I usually recommend at least 500 iterations or more
                        burnin = 180,
                        alpha = 0.1,
                        beta = 0.05,

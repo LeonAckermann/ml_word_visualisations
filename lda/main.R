@@ -8,7 +8,70 @@ library(text2vec)
 library(dplyr)
 library(quanteda)
 
+get_removal_columns <- function(dtm, percent, type){
+  terms <- get_removal_terms(dtm, percent, type)
+  filtered_terms_test <- c()
+  for (term in terms){
+    filtered_terms_test <- c(filtered_terms_test, term)
+  }
+  #filtered_terms_test <- c("sad", "tired", "happy", "low")
+  column_indices_to_remove <- which(colnames(dtm) %in% filtered_terms_test)
+  return(column_indices_to_remove)
+}
 
+get_removal_terms <- function(dtm, percent, type){
+  term_frequencies <- colSums(as.matrix(dtm))
+  df <- data.frame(as.matrix(dtm))
+  
+  # Create a data frame with term and frequency
+  term_frequency_df <- data.frame(Term = colnames(dtm), Frequency = term_frequencies)
+  
+  # Sort the data frame in descending order of frequency
+  term_frequency_df <- term_frequency_df[order(-term_frequency_df$Frequency), ]
+  
+  # Print the terms with the highest frequencies (e.g., top 10 terms)
+  #top_terms <- head(term_frequency_df, n = 10)
+  removal_index <- nrow(term_frequency_df)*percent
+  print(nrow(term_frequency_df))
+  if (type=="most"){
+    removal_index <- round(removal_index) 
+    removal_words <- term_frequency_df[["Term"]][1:removal_index] 
+    
+  } else {
+    removal_index <- nrow(term_frequency_df) - round(removal_index) # calculates index of term that has highest freqency of all percent least frequent words
+    removal_words <- term_frequency_df[["Term"]][nrow(term_frequency_df):removal_index] 
+    
+  }
+  #removal_index <- round(removal_index) 
+  print("removal words")
+  print(removal_words)
+  return(removal_words)
+}
+
+get_removal_frequency <- function(dtm, percent, type){
+  term_frequencies <- colSums(as.matrix(dtm))
+  df <- data.frame(as.matrix(dtm))
+  
+  # Create a data frame with term and frequency
+  term_frequency_df <- data.frame(Term = colnames(dtm), Frequency = term_frequencies)
+  
+  # Sort the data frame in descending order of frequency
+  term_frequency_df <- term_frequency_df[order(-term_frequency_df$Frequency), ]
+  
+  # Print the terms with the highest frequencies (e.g., top 10 terms)
+  #top_terms <- head(term_frequency_df, n = 10)
+  removal_index <- nrow(term_frequency_df)*percent
+  print(nrow(term_frequency_df))
+  if (type=="most"){
+    removal_index <- round(removal_index) 
+    print(removal_index)
+  } else {
+    removal_index <- nrow(term_frequency_df) - round(removal_index) # calculates index of term that has highest freqency of all percent least frequent words
+  }
+  #removal_index <- round(removal_index) 
+  removal_frequency <- term_frequency_df[["Frequency"]][removal_index] 
+  return(removal_frequency)
+}
 
 get_dtm <- function(data_dir, # provide relative directory path to data
                     id_col,
@@ -17,13 +80,16 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                     ngram_window,
                     stopwords,
                     removalword,
+                    removal_rate_most,
+                    removal_rate_least,
                     split,
                     seed){
   set.seed(seed)
   
   # Data
-  text <- readRDS(data_dir) #load data
-  text_cols= text[c(id_col,data_col,group_var,"Sex", "age", "current_score")] #, "minidep_scale", "miniGAD_scale")] # select columns
+  #text <- readRDS(data_dir) #load data
+  text <- read_csv(data_dir)
+  text_cols= text[c(id_col,data_col,group_var,"Gender", "age", "PHQtot", "GADtot")] #, "minidep_scale", "miniGAD_scale")] # select columns
   text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
@@ -69,9 +135,26 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                    remove_numbers = TRUE, # numbers - this is the default
                    verbose = FALSE, # Turn off status bar for this demo
                    cpus = 4) # default is all available cpus on the system
-
+  train_dtm <- train_dtm[,colSums(train_dtm) > 2]
+  if (removal_rate_least > 0){
+    removal_columns <- get_removal_columns(train_dtm, removal_rate_least, "least")
+    if (removal_rate_most > 0){
+      removal_columns_most <- get_removal_columns(train_dtm, removal_rate_most, "most")
+      removal_columns <- c(removal_columns, removal_columns_most)
+    }
+    train_dtm <- train_dtm[,-removal_columns]
+  } else if (removal_rate_most > 0){
+    removal_columns <- get_removal_columns(train_dtm, removal_rate_most, "most")
+    train_dtm <- train_dtm[,-removal_columns]
+  }
+  if (removal_rate_least > 0 | removal_rate_most > 0){
+    print("removal columns")
+    print(removal_columns)
+  }
   
-  train_dtm <- train_dtm[,colSums(train_dtm) > 2] # remove words with occurences < 2
+  
+  
+  
   #train_dtm <- dfm_trim(train_dtm, c("family", "families"))
   # create a document term matrix for test set
   test_dtm <- CreateDtm(doc_vec = test[[data_col]], # character vector of documents
@@ -83,7 +166,19 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                          remove_numbers = TRUE, # numbers - this is the default
                          verbose = FALSE, # Turn off status bar for this demo
                          cpus = 4) # default is all available cpus on the system
-  test_dtm <- test_dtm[,colSums(test_dtm) > 2] # remove words with occurences < 2
+  test_dtm <- test_dtm[,colSums(test_dtm) > 2]
+  
+  if (removal_rate_least > 0){
+    removal_columns <- get_removal_columns(test_dtm, removal_rate_least, "least")
+    if (removal_rate_most > 0){
+      removal_columns_most <- get_removal_columns(test_dtm, removal_rate_most, "most")
+      removal_columns <- c(removal_columns, removal_columns_most)
+    }
+    test_dtm <- test_dtm[,-removal_columns]
+  } else if (removal_rate_most > 0){
+    removal_columns <- get_removal_columns(test_dtm, removal_rate_most, "most")
+    test_dtm <- test_dtm[,-removal_columns]
+  }
   
   
   return(list(train_dtm=train_dtm, test_dtm=test_dtm, train_data=train, test_data=test,split_stats=result_df))
@@ -124,6 +219,8 @@ get_lda_model <- function(model_type,
     model$summary[order(model$summary$prevalence, decreasing = TRUE) , ][ 1:10 , ]
   }
   
+  print(save_dir)
+  
   if (!is.null(save_dir)){
     if (!dir.exists(save_dir)) {
       # Create the directory
@@ -161,7 +258,7 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     preds <- as_tibble(preds)
     colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
     categories <- data[group_var]
-    view(categories)
+    #view(categories)
     preds <- bind_cols(categories, preds)
     preds <- preds %>% tibble()
 
@@ -176,7 +273,9 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     if(!dir.exists(paste0(save_dir, "/seed_", seed))){
       dir.create(paste0(save_dir, "/seed_", seed))
     }
-    saveRDS(model, paste0(save_dir, "/seed_", seed, "/preds.rds"))
+    print(save_dir)
+    view(preds)
+    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/preds.rds"))
   }
   
   return(preds)

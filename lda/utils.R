@@ -1,3 +1,7 @@
+library(text)
+library(reticulate)
+use_condaenv("text_package", required = TRUE)
+library(recipes)
 #mallet, the javascript for textmining
 # @param topic_model (list object) LDA topic from textmineR with model$summary (see: https://cran.r-project.org/web/packages/textmineR/vignettes/c_topic_modeling.html)
 
@@ -476,7 +480,7 @@ topic_test <- function(topic_terms,
       lda_topics[i] <- paste("t_", i, sep = "")
     }
     
-    view(preds)
+    #view(preds)
     
     preds <- topics_loadings # load topics_loading into different variable to reduce naming errors
     for (topic in lda_topics) {
@@ -600,6 +604,41 @@ topic_test <- function(topic_terms,
     
     
   }
+  
+  if (test_method == "textTrain_regression"){
+    num_topics <- nrow(topic_terms)
+    preds <- topics_loadings
+    
+    # rename topic columns
+    for (i in 1:num_topics) {
+      old_column_name <- paste0("t_", i)
+      new_column_name <- paste0("Dim", i, "_texts")
+      
+      if (old_column_name %in% colnames(preds)) {
+        colnames(preds)[colnames(preds) == old_column_name] <- new_column_name
+      }
+    }
+    
+    dims <- as.data.frame(preds) %>% select(contains("Dim"))
+    view(dims)
+    #dims <- step_zv(dims)
+    dims <- as_tibble(dims)
+    preds <- as_tibble(preds)
+    for (col in colnames(dims)) {
+      dims[[col]] <- as.numeric(dims[[col]])
+    }
+    trained_model <- textTrainRegression(
+      x = dims,
+      y = grouping_variable,
+      multi_cores = FALSE # This is FALSE due to CRAN testing and Windows machines.
+    )
+    
+    # Examine results (t-value, degree of freedom (df), p-value, alternative-hypothesis,
+    # confidence interval, correlation coefficient).
+    
+    return (trained_model$results)
+    
+    }
   
 }
 

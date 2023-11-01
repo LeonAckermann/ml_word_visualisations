@@ -1,0 +1,322 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## using LDA model of textmineR
+- mallet will be supported later
+- data is private therefore not included in repository
+
+```{r}
+model <- readRDS("./results/dep_all_words_20/seed_2/model.rds")
+preds <- readRDS("./results/dep_all_words_20/seed_2/preds.rds")
+
+test <- get_lda_test(model=model,
+                     preds=preds,
+                     group_var = "PHQtot",
+                     control_vars = c("PHQtot"),
+                     test_method = "linear_regression",
+                     seed=2)
+view(test)
+```
+```{r}
+source("./lda/main.R")
+
+num_topics <- c(100)
+answer_type <- c("all_words")#,"all_phrases", "text")
+categories <- c("dep")#, "wor")
+removal_frequencies_most <- c(0, 0.01)
+removal_frequencies_least <- c(0, 0.01, 0.02, 0.05)
+seed <- 4
+
+for (num_topic in num_topics){
+  for (type in answer_type){
+    for (category in categories){
+      for (most in removal_frequencies_most){
+        for (least in removal_frequencies_least){
+          tryCatch({
+            save_dir <- ""
+            if (category=="dep"){
+              group_var <- "minidep_diagnose"
+            } else {
+              group_var <- "miniGAD_diagnose"
+            }
+            #print(num_topic)
+            #print(type)
+            #print(category)
+            dtms <- get_dtm(data_dir = "./data/depression_anxiety_cleaned.csv",
+                            id_col = "participant_id",
+                            data_col = paste0(category, "_", type),
+                            group_var = group_var,
+                            ngram_window = c(1,3),
+                            stopwords = NULL,
+                            removalword = "",
+                            removal_rate_most = most,
+                            removal_rate_least = least,
+                            split=1,
+                            seed=seed)
+      
+            save_dir <- paste0("./results/",category, "_", type, "_", num_topic, "_most_",most, "_least_", least)
+            #print(save_dir)
+            model <- get_lda_model(model_type="mallet",
+                                   dtm=dtms$train_dtm,
+                                   num_topics=num_topic,
+                                   num_top_words=10,
+                                   num_iterations = 2000,
+                                   seed=seed,
+                                   save_dir = save_dir)
+      
+            preds <- get_lda_preds(model = model,
+                                   num_iterations=500,
+                                   data = dtms$train_data,
+                                   dtm = dtms$train_dtm,
+                                   group_var = c(group_var,
+                                               "Gender",
+                                               "age",
+                                               "PHQtot",
+                                               "GADtot"),
+                                   seed=seed,
+                                   save_dir = save_dir)
+          }, error = function(err) {
+              # Handle the error or do nothing to continue with the loop
+              # You can print an error message, log it, or simply continue the loop
+              cat("An error occurred: ", conditionMessage(err), "\n")
+            }
+          )
+        }
+      }
+    }
+  }
+}
+```
+
+```{r}
+source("./lda/main.R")
+
+num_topics <- c(100)
+answer_type <- c("all_words")#,"all_phrases", "text")
+categories <- c("dep")#, "wor")
+removal_frequencies_most <- c(0, 0.01)
+removal_frequencies_least <- c(0, 0.01, 0.02, 0.05)
+seed <- 4
+
+for (num_topic in num_topics){
+  for (type in answer_type){
+    for (category in categories){
+      for (most in removal_frequencies_most){
+        for (least in removal_frequencies_least){
+          tryCatch({
+            # Code that may produce an error
+            # ...
+              dir <- paste0("./results/", category, "_", type, "_", num_topic, "_most_",most, "_least_", least,"/seed_", seed)
+              print(dir)
+              model <- readRDS(paste0(dir, "/model.rds"))
+              preds <- readRDS(paste0(dir, "/preds.rds"))
+      
+              variable <- c("PHQtot", "GADtot")
+              estimates <- c()
+              t_values <- c()
+              p_values <- c()
+      
+              test <- get_lda_test(model=model,
+                               preds=preds,
+                               group_var = "PHQtot",
+                               control_vars = c("randnumber"),
+                               test_method = "textTrain_regression",
+                               seed=seed)
+      
+              estimates <- c(estimates, test$estimate)
+              t_values <- c(t_values, test$statistic)
+              p_values <- c(p_values, test$p.value)
+      
+              test <- get_lda_test(model=model,
+                               preds=preds,
+                               group_var = "GADtot",
+                               control_vars = c("randnumber"),
+                               test_method = "textTrain_regression",
+                               seed=seed)
+      
+              estimates <- c(estimates, test$estimate)
+              t_values <- c(t_values, test$statistic)
+              p_values <- c(p_values, test$p.value)
+      
+              df <- list(variable = variable,
+                     estimate = estimates,
+                     t_value = t_values,
+                     p_value = p_values)
+              write_csv(data.frame(df), paste0(dir, "/textTrain_regression.csv"))
+            # If the error occurs, it will be caught here
+            }, error = function(err) {
+              # Handle the error or do nothing to continue with the loop
+              # You can print an error message, log it, or simply continue the loop
+              cat("An error occurred: ", conditionMessage(err), "\n")
+            }
+          )
+        }
+      }
+    }
+  }
+}
+
+```
+
+```{r}
+source("./lda/main.R")
+
+num_topics <- c(100)
+answer_type <- c("all_words")#,"all_phrases", "text")
+categories <- c("dep")#, "wor")
+removal_frequencies_most <- c(0, 0.01)
+removal_frequencies_least <- c(0, 0.01, 0.02, 0.05)
+seed <- 4
+
+variable_column <- c()
+estimate_column <- c()
+t_value_column <- c()
+p_value_column <- c()
+num_topic_column <- c()
+type_column <- c()
+category_column <- c()
+removal_most_column <- c()
+removal_least_column <- c()
+
+for (num_topic in num_topics){
+  for (type in answer_type){
+    for (category in categories){
+      for (most in removal_frequencies_most){
+        for (least in removal_frequencies_least){
+          tryCatch({
+            dir <- paste0("./results/", category, "_", type, "_", num_topic, "_most_",most, "_least_", least, "/seed_", seed)
+            test <- read_csv(paste0(dir, "/textTrain_regression.csv"))
+            category_column <- c(category_column, category)
+            type_column <- c(type_column, type)
+            removal_most_column <- c(removal_most_column, most)
+            removal_least_column <- c(removal_least_column, least)
+            num_topic_column <- c(num_topic_column, num_topic)
+            variable_column <- c(variable_column, test$variable[1])
+            estimate_column <- c(estimate_column, test$estimate[1])
+            t_value_column <- c(t_value_column, test$t_value[1])
+            p_value_column <- c(p_value_column, test$p_value[1])
+            category_column <- c(category_column, category)
+            type_column <- c(type_column, type)
+            num_topic_column <- c(num_topic_column, num_topic)
+            variable_column <- c(variable_column, test$variable[2])
+            estimate_column <- c(estimate_column, test$estimate[2])
+            t_value_column <- c(t_value_column, test$t_value[2])
+            p_value_column <- c(p_value_column, test$p_value[2])
+      
+            df <- list(category = category_column,
+                       type = type_column,
+                       num_topics = num_topic_column,
+                       removal_frequency_most = removal_most_column,
+                       removal_frequencies_least = removal_least_column,
+                       variable = variable_column,
+                       estimate = estimate_column,
+                       t_value = t_value_column,
+                       p_value = p_value_column)
+            write_csv(data.frame(df), paste0("./results/textTrain_regression_all_seed_", seed, ".csv"))
+          }, error = function(err) {
+              # Handle the error or do nothing to continue with the loop
+              # You can print an error message, log it, or simply continue the loop
+              cat("An error occurred: ", conditionMessage(err), "\n")
+            }
+          )
+        }
+      }
+    }
+  }
+}
+```
+
+```{r}
+model <- readRDS("./results/dep_all_words_100/seed_1234/model.rds")
+preds <- readRDS("./results/dep_all_words_100/seed_1234/preds.rds")
+view(model$summary)
+test <- get_lda_test(model=model,
+                     preds=preds,
+                     group_var = "PHQtot",
+                     control_vars = c("PHQtot"),
+                     test_method = "linear_regression",
+                     seed=1234)
+view(test)
+```
+```{r}
+model <- readRDS("./results/dep_all_words_100/seed_2/model.rds")
+view(model$summary)
+```
+
+```{r}
+preds <- readRDS("./results/dep_all_words_100/seed_1234/preds.rds")
+num_topics <- 100
+
+# rename topic columns
+for (i in 1:num_topics) {
+  old_column_name <- paste0("t_", i)
+  new_column_name <- paste0("Dim", i, "_texts")
+      
+  if (old_column_name %in% colnames(preds)) {
+    colnames(preds)[colnames(preds) == old_column_name] <- new_column_name
+  }
+}
+    
+dims <- as.data.frame(preds) %>% select(contains("Dim"))
+dims <- as_tibble(dims)
+preds <- as_tibble(preds)
+for (col in colnames(dims)) {
+  dims[[col]] <- as.numeric(dims[[col]])
+}
+
+for (i in 1:100){
+  plot(x=dims[[paste0("Dim", i, "_texts")]], 
+       y=preds$PHQtot, 
+       xlabel = paste0("Topic",i))
+}
+```
+
+```{r}
+write_csv(data.frame(df), paste0(dir, "/textTrain_regression.csv"))
+```
+```{r}
+test$p.value[1]
+
+```
+
+```{r}
+saveRDS(preds, "./dep_all_words_20/seed_1234/preds.rds")
+```
+
+```{r}
+preds <- data.frame(readRDS("./dep_all_words_20/seed_1234/preds.rds"))
+for (i in 1:20) {
+  old_column_name <- paste0("t_", i)
+  new_column_name <- paste0("Dim", i, "_texts")
+  
+  if (old_column_name %in% colnames(preds)) {
+    colnames(preds)[colnames(preds) == old_column_name] <- new_column_name
+  }
+}
+```
+
+
+```{r}
+library(text)
+library(reticulate)
+use_condaenv("text_package", required = TRUE)
+dims <- as.data.frame(preds) %>% select(contains("Dim"))
+view(dims)
+for (col in colnames(dims)) {
+  dims[[col]] <- as.numeric(dims[[col]])
+}
+trained_model <- textTrainRegression(
+  x = dims,
+  y = preds$PHQtot,
+  multi_cores = FALSE # This is FALSE due to CRAN testing and Windows machines.
+)
+
+# Examine results (t-value, degree of freedom (df), p-value, alternative-hypothesis,
+# confidence interval, correlation coefficient).
+
+trained_model$results
+
+```
+

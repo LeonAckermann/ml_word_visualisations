@@ -8,8 +8,54 @@ library(text2vec)
 library(dplyr)
 library(quanteda)
 
-get_removal_columns <- function(dtm, percent, type){
-  terms <- get_removal_terms(dtm, percent, type)
+get_relative_frequency_term_document <- function(dtm){
+  # Convert binary matrix to a count matrix
+  count_matrix <- as.matrix(dtm)
+
+  # Calculate the sum of term counts in each document
+  total_term_counts <- colSums(count_matrix)
+  #view(total_term_counts)
+  
+  # Calculate the relative frequency matrix
+  relative_frequency_matrix <- count_matrix / total_term_counts
+  
+  relative_frequency_matrix[is.na(relative_frequency_matrix)] <- 0
+  return(relative_frequency_matrix)
+}
+
+# returns matrix in shape num(topics)*num(documents)
+# dim(topic_term_matrix) = num(topics)*num(terms)
+# dim(term_document_matrix) = num(terms)*num(documents)
+get_topic_per_document_dist <- function(topic_term_matrix, term_document_matrix, vocabulary){
+  num_topics <- dim(topic_term_matrix)[1]
+  num_documents <- dim(term_document_matrix)[1]
+  num_words <- length(vocabulary)
+  terms <- colnames(term_document_matrix)
+  colnames(topic_term_matrix) <- as.character(unlist(model$vocabulary))
+  
+  topic_document_matrix <- array(0, dim = c(num_documents, num_topics))
+  for (i in 1:num_documents){
+    for (j in 1:num_topics){
+      for (k in 1:num_words){
+        topic_document_matrix[i,j] <- topic_document_matrix[i,j] + (topic_term_matrix[j,k] * term_document_matrix[i,k])# multiple topic_term_matrix[j][k]* term_document_matrix[i][k] and
+      }
+    }
+  }
+  return(topic_document_matrix)
+}
+
+get_occ_frequency <- function(dtm, occ_rate){
+  term_frequencies <- colSums(as.matrix(dtm))
+  df <- data.frame(as.matrix(dtm))
+  
+  # Create a data frame with term and frequency
+  term_frequency_df <- data.frame(Term = colnames(dtm), Frequency = term_frequencies)
+  removal_frequency <- round(nrow(term_frequency_df)*occ_rate)
+  return(removal_frequency)
+}
+
+get_removal_columns <- function(dtm, n, type, mode="absolute"){
+  terms <- get_removal_terms(dtm, n, type, mode)
   filtered_terms_test <- c()
   for (term in terms){
     filtered_terms_test <- c(filtered_terms_test, term)
@@ -19,7 +65,16 @@ get_removal_columns <- function(dtm, percent, type){
   return(column_indices_to_remove)
 }
 
-get_removal_terms <- function(dtm, percent, type){
+get_dtm_to_df <- function(dtm){
+  term_frequencies <- colSums(as.matrix(dtm))
+  df <- data.frame(as.matrix(dtm))
+  
+  # Create a data frame with term and frequency
+  term_frequency_df <- data.frame(Term = colnames(dtm), Frequency = term_frequencies)
+  return(term_frequency_df)
+}
+
+get_removal_terms <- function(dtm, n, type, mode="absolute"){
   term_frequencies <- colSums(as.matrix(dtm))
   df <- data.frame(as.matrix(dtm))
   
@@ -31,20 +86,19 @@ get_removal_terms <- function(dtm, percent, type){
   
   # Print the terms with the highest frequencies (e.g., top 10 terms)
   #top_terms <- head(term_frequency_df, n = 10)
-  removal_index <- nrow(term_frequency_df)*percent
-  print(nrow(term_frequency_df))
+  if (mode=="percent"){
+    removal_index <- nrow(term_frequency_df)*n 
+  } else if (mode == "absolute"){
+    removal_index <- n-1
+  }
   if (type=="most"){
     removal_index <- round(removal_index) 
-    removal_words <- term_frequency_df[["Term"]][1:removal_index] 
-    
+    removal_words <- term_frequency_df[["Term"]][1:removal_index]
   } else {
     removal_index <- nrow(term_frequency_df) - round(removal_index) # calculates index of term that has highest freqency of all percent least frequent words
-    removal_words <- term_frequency_df[["Term"]][nrow(term_frequency_df):removal_index] 
-    
+    removal_words <- term_frequency_df[["Term"]][nrow(term_frequency_df):removal_index]
   }
-  #removal_index <- round(removal_index) 
-  print("removal words")
-  print(removal_words)
+
   return(removal_words)
 }
 
@@ -80,6 +134,8 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                     ngram_window,
                     stopwords,
                     removalword,
+                    occ_rate,
+                    removal_mode,
                     removal_rate_most,
                     removal_rate_least,
                     split,
@@ -129,22 +185,29 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   train_dtm <- CreateDtm(doc_vec = train[[data_col]], # character vector of documents
                    doc_names = train[[id_col]], # document names
                    ngram_window = ngram_window, # minimum and maximum n-gram length
-                   stopword_vec = stopwords::stopwords("en", source = "snowball"),
+                   #stopword_vec = stopwords::stopwords("en", source = "snowball"),
                    lower = TRUE, # lowercase - this is the default value
                    remove_punctuation = TRUE, # punctuation - this is the default
                    remove_numbers = TRUE, # numbers - this is the default
                    verbose = FALSE, # Turn off status bar for this demo
                    cpus = 4) # default is all available cpus on the system
-  train_dtm <- train_dtm[,colSums(train_dtm) > 2]
+  if (occ_rate>0){
+    print("rows in train")
+    print(nrow(train))
+    removal_frequency <- round(nrow(train)*occ_rate) -1
+    print("removal frequency")
+    print(removal_frequency)
+    train_dtm <- train_dtm[,colSums(train_dtm) > removal_frequency]
+  }
   if (removal_rate_least > 0){
-    removal_columns <- get_removal_columns(train_dtm, removal_rate_least, "least")
+    removal_columns <- get_removal_columns(train_dtm, removal_rate_least, "least", removal_mode)
     if (removal_rate_most > 0){
-      removal_columns_most <- get_removal_columns(train_dtm, removal_rate_most, "most")
+      removal_columns_most <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
       removal_columns <- c(removal_columns, removal_columns_most)
     }
     train_dtm <- train_dtm[,-removal_columns]
   } else if (removal_rate_most > 0){
-    removal_columns <- get_removal_columns(train_dtm, removal_rate_most, "most")
+    removal_columns <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
     train_dtm <- train_dtm[,-removal_columns]
   }
   if (removal_rate_least > 0 | removal_rate_most > 0){
@@ -166,17 +229,19 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                          remove_numbers = TRUE, # numbers - this is the default
                          verbose = FALSE, # Turn off status bar for this demo
                          cpus = 4) # default is all available cpus on the system
-  test_dtm <- test_dtm[,colSums(test_dtm) > 2]
+  removal_frequency <- get_occ_frequency(test_dtm, occ_rate)
+  
+  test_dtm <- test_dtm[,colSums(test_dtm) > removal_frequency]
   
   if (removal_rate_least > 0){
-    removal_columns <- get_removal_columns(test_dtm, removal_rate_least, "least")
+    removal_columns <- get_removal_columns(test_dtm, removal_rate_least, "least", removal_mode)
     if (removal_rate_most > 0){
-      removal_columns_most <- get_removal_columns(test_dtm, removal_rate_most, "most")
+      removal_columns_most <- get_removal_columns(test_dtm, removal_rate_most, "most", removal_mode)
       removal_columns <- c(removal_columns, removal_columns_most)
     }
     test_dtm <- test_dtm[,-removal_columns]
   } else if (removal_rate_most > 0){
-    removal_columns <- get_removal_columns(test_dtm, removal_rate_most, "most")
+    removal_columns <- get_removal_columns(test_dtm, removal_rate_most, "most", removal_mode)
     test_dtm <- test_dtm[,-removal_columns]
   }
   
@@ -242,6 +307,7 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
                           data,
                           group_var, # only needed if load_dir==NULL
                           seed,
+                          mode="custom",
                           save_dir=NULL,
                           load_dir=NULL){
   set.seed(seed)
@@ -249,12 +315,21 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     preds <- readRDS(paste0(load_dir, "/seed_", seed, "/preds.rds"))
   } else {
     #data <- read.csv(paste0("./data/", data_dir))
-    preds <- predict(model$pred_model,
-                     dtm,
-                     method = "gibbs",
-                     iterations = num_iterations,
-                     burnin = 180,
-                     cpus = 4)
+    if (mode=="predict"){
+      preds <- predict(model$pred_model,
+                       dtm,
+                       method = "gibbs",
+                       iterations = num_iterations,
+                       burnin = 180,
+                       cpus = 4)
+    } else if (mode=="custom"){
+      print("custom")
+      preds <- get_topic_per_document_dist(topic_term_matrix = model$phi,
+                                           term_document_matrix = get_relative_frequency_term_document(dtms$train_dtm),
+                                           vocabulary = model$vocabulary)
+    }
+    
+    #preds <- model$topic_docs
     preds <- as_tibble(preds)
     colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
     categories <- data[group_var]
@@ -324,6 +399,7 @@ get_mallet_model <- function(dtm,
                              num_iterations){
   # still to complete
   docs <- Dtm2Docs(dtm)
+  
   model <- MalletLDA(num.topics = num_topics,
                             alpha.sum = 5,
                             beta = 0.01)
@@ -358,13 +434,16 @@ get_mallet_model <- function(dtm,
   #return_model$top_terms_mallet <- bind_rows(list_top_terms)
   return_model$top_terms_mallet <- df_top_terms
   return_model$top_terms <- return_model$top_terms_mallet
+  #return_model$phi <- mallet.topic.w
   return_model$phi <- mallet.topic.words(model, smoothed=TRUE, normalized=TRUE)
+  return_model$topic_docs <- mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)
   #return_model$top_terms <- GetTopTerms(phi = return_model$phi, M = num_top_words)
-  
+  return_model$frequencies <- mallet.word.freqs(model)
+  return_model$vocabulary <- model$getVocabulary()
   model$prevalence_mallet <- colSums(mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)) /
     sum(mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)) * 100
   #sum(list_top_terms$prevalence)
-  
+  return_model$labels <- mallet.topic.labels(model)
   return_model$theta <- mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)
   return_model$prevalence <- colSums(return_model$theta) / sum(return_model$theta) * 100
   keys <- paste0("t_", 1:num_topics)

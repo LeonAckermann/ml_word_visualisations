@@ -31,7 +31,7 @@ group_col <- "minidep_diagnose" # now necessary, but only used for t-test
 
 **Document Term Matrix**
 
-```{r}
+```R
 ngram_window <- c(1,3)
 stopwords <- stopwords::stopwords("en", source = "snowball")
 removalword <- "" # just possible with one word
@@ -44,7 +44,7 @@ split <- 1
 
 **LDA**
 
-```{r}
+```R
 model_type <- "textmineR" # or "mallet"
 num_topics <- 20
 num_top_words <- 10
@@ -55,7 +55,7 @@ pred_mode <- "function" # or "custom" for mallet
 
 **Analysis**
 
-```{r}
+```R
 cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
 control_vars <- c("PHQtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
@@ -63,7 +63,7 @@ test_method <- "textTrain_regression" # linear_regression, logistic_regression, 
 
 **Miscellaneous**
 
-```{r}
+```R
 seed <- 1234
 ```
 
@@ -79,7 +79,7 @@ All objects created within the pipeline are created in the directory below. Thes
 
 -   analysis results
 
-```{r}
+```R
 save_dir <- paste0("./results/",
             model_type,"_",
             data_col, "_",
@@ -88,12 +88,11 @@ save_dir <- paste0("./results/",
             "_least_", removal_num_least, 
             "_occ_", occ_rate, 
             "_pred_", mode)
-
 ```
 
 ##### 0.3 Imports
 
-```{r}
+```R
 library(textmineR)
 library(tidyverse)
 library(dplyr)
@@ -108,7 +107,7 @@ source("./lda/main.R")
 
 #### 1. Compute Document Term Matrix
 
-```{r}
+```R
 dtms <- get_dtm(data_dir = data_dir,
                 id_col = id_col,
                 data_col = data_col,
@@ -127,7 +126,7 @@ dtms <- get_dtm(data_dir = data_dir,
 
 #### 2. Create LDA Model
 
-```{r}
+```R
 model <- get_lda_model(model_type=model_type,
                         dtm=dtms$train_dtm,
                         num_topics=num_topics,
@@ -139,7 +138,7 @@ model <- get_lda_model(model_type=model_type,
 
 #### 3. Create Predictions
 
-```{r}
+```R
 preds <- get_lda_preds(model = model,
                         num_iterations=num_pred_iterations,
                         data = dtms$train_data,
@@ -148,14 +147,13 @@ preds <- get_lda_preds(model = model,
                         seed=seed,
                         mode=mode,
                         save_dir = save_dir)
-view(preds)
 ```
 
 #### 4. Analysis
 
 ##### 4.1 textTrain_regression
 
-```{r}
+```R
 test <- get_lda_test(model=model,
                     preds=preds,
                     group_var = cor_var,
@@ -167,7 +165,7 @@ test <- get_lda_test(model=model,
 
 ##### 4.2 Linear Regression
 
-```{r}
+```R
 test <- get_lda_test(model=model,
                     preds=preds,
                     group_var = cor_var,

@@ -1,27 +1,26 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
 # ml_word_visualisations
 
 ## Structure of repository
 
-Folder [lda](./lda) consists of the files to run lda experiments
-
-1.  [utils.R](./lda/utils.R) which includes functions for testing lda topics
-
-2.  [main.R](./lda/main.R) which includes methods for creating and testing lda models from different libraries
+Folder [lda](./lda) consists of the files to run lda experiments 
+1. [utils.R](./lda/utils.R) which includes functions for testing lda topics 
+2. [main.R](./lda/main.R) which includes methods for creating and testing lda models from different libraries
 
 Folder [data](./data) is there to store your data. <br>
-
 Folder [results](./results) stores the results of your experiment
 
-## Example
+## Example 
 
 ### LDA
-
 #### 0. Preparation
-
 #### 0.1 Set (hyper)parameters
 
-**Data**
-
+**Data** 
 ```{r}
 data_dir <- "./data/depression_anxiety_cleaned.csv"
 data_col <- "dep_all_words"
@@ -29,8 +28,7 @@ id_col <- "unique_id"
 group_col <- "minidep_diagnose" # now necessary, but only used for t-test
 ```
 
-**Document Term Matrix**
-
+**Document Term Matrix** 
 ```{r}
 ngram_window <- c(1,3)
 stopwords <- stopwords::stopwords("en", source = "snowball")
@@ -42,8 +40,8 @@ removal_mode <- "absolute" # "relative"
 split <- 1
 ```
 
-**LDA**
 
+**LDA** 
 ```{r}
 model_type <- "textmineR" # or "mallet"
 num_topics <- 20
@@ -54,31 +52,23 @@ pred_mode <- "function" # or "custom" for mallet
 ```
 
 **Analysis**
-
 ```{r}
 cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
 control_vars <- c("PHQtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
 ```
 
-**Miscellaneous**
-
+**Miscellaneous** 
 ```{r}
 seed <- 1234
 ```
 
 ##### 0.2 Create directory to save all computations
-
 All objects created within the pipeline are created in the directory below. These include
-
--   Document Term Matrix
-
--   model
-
--   predictions
-
--   analysis results
-
+- Document Term Matrix
+- model
+- predictions
+- analysis results
 ```{r}
 save_dir <- paste0("./results/",
             model_type,"_",
@@ -92,7 +82,6 @@ save_dir <- paste0("./results/",
 ```
 
 ##### 0.3 Imports
-
 ```{r}
 library(textmineR)
 library(tidyverse)
@@ -107,7 +96,6 @@ source("./lda/main.R")
 ```
 
 #### 1. Compute Document Term Matrix
-
 ```{r}
 dtms <- get_dtm(data_dir = data_dir,
                 id_col = id_col,
@@ -126,7 +114,6 @@ dtms <- get_dtm(data_dir = data_dir,
 ```
 
 #### 2. Create LDA Model
-
 ```{r}
 model <- get_lda_model(model_type=model_type,
                         dtm=dtms$train_dtm,
@@ -138,7 +125,6 @@ model <- get_lda_model(model_type=model_type,
 ```
 
 #### 3. Create Predictions
-
 ```{r}
 preds <- get_lda_preds(model = model,
                         num_iterations=num_pred_iterations,
@@ -152,9 +138,7 @@ view(preds)
 ```
 
 #### 4. Analysis
-
 ##### 4.1 textTrain_regression
-
 ```{r}
 test <- get_lda_test(model=model,
                     preds=preds,
@@ -166,7 +150,6 @@ test <- get_lda_test(model=model,
 ```
 
 ##### 4.2 Linear Regression
-
 ```{r}
 test <- get_lda_test(model=model,
                     preds=preds,

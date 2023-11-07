@@ -22,7 +22,7 @@ Folder [results](./results) stores the results of your experiment
 
 **Data**
 
-```{r}
+```R
 data_dir <- "./data/depression_anxiety_cleaned.csv"
 data_col <- "dep_all_words"
 id_col <- "unique_id"

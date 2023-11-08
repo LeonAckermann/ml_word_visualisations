@@ -35,9 +35,9 @@ ngram_window <- c(1,3)
 stopwords <- stopwords::stopwords("en", source = "snowball")
 removalword <- "" # just possible with one word
 occ_rate <- 0
-removal_num_most <- 1
-removal_num_least <- 0
-removal_mode <- "absolute" # "relative"
+removal_num_most <- 100
+removal_num_least <- 2
+removal_mode <- "threshold" # "relative"
 split <- 1
 ```
 
@@ -55,7 +55,7 @@ pred_mode <- "function" # or "custom" for mallet
 **Analysis**
 ```{r}
 cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
-control_vars <- c("PHQtot") # vector of variables to control analysis with if test_method is linear_regression
+control_vars <- c("PHQtot", "GADtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
 ```
 
@@ -134,10 +134,11 @@ preds <- get_lda_preds(model = model,
                         num_iterations=num_pred_iterations,
                         data = dtms$train_data,
                         dtm = dtms$train_dtm,
-                        group_var = c(cor_var),
+                        group_var = NULL,
                         seed=seed,
                         mode=mode,
                         save_dir = save_dir)
+view(preds)
 ```
 
 #### 4. Analysis
@@ -145,6 +146,7 @@ preds <- get_lda_preds(model = model,
 ```{r}
 test <- get_lda_test(model=model,
                     preds=preds,
+                    data=dtms$train_data,
                     group_var = cor_var,
                     control_vars = control_vars,
                     test_method = "textTrain_regression",
@@ -152,10 +154,15 @@ test <- get_lda_test(model=model,
                     save_dir=save_dir)
 ```
 
+```{r}
+view(dtms$train_data)
+```
+
 ##### 4.2 Linear Regression
 ```{r}
 test <- get_lda_test(model=model,
                     preds=preds,
+                    data=dtms$test_data,
                     group_var = cor_var,
                     control_vars = control_vars,
                     test_method = "linear_regression",

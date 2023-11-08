@@ -103,7 +103,7 @@ source("./lda/main.R")
 dtms <- get_dtm(data_dir = data_dir,
                 id_col = id_col,
                 data_col = data_col,
-                group_var = group_col, # used if t-test, is binary, so this is optional
+                group_var = group_var, # used if t-test, is binary, so this is optional
                 cor_var = cor_var, # used for regression, correlation
                 ngram_window = ngram_window,
                 stopwords = stopwords,

@@ -152,11 +152,12 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   # Data
   #text <- readRDS(data_dir) #load data
   text <- read_csv(data_dir)
-  if (is.null(group_var)){
-    text_cols= text[c(id_col,data_col,cor_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
-  } else {
-    text_cols= text[c(id_col,data_col,cor_var, group_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
-  }
+  #if (is.null(group_var)){
+  #  text_cols= text[c(id_col,data_col,cor_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
+  #} else {
+  #  text_cols= text[c(id_col,data_col,cor_var, group_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
+  #}
+  text_cols <- text
   text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
@@ -215,17 +216,23 @@ get_dtm <- function(data_dir, # provide relative directory path to data
     #print(removal_frequency)
     train_dtm <- train_dtm[,colSums(train_dtm) > removal_frequency]
   }
-  if (removal_rate_least > 0){
-    removal_columns <- get_removal_columns(train_dtm, removal_rate_least, "least", removal_mode)
-    if (removal_rate_most > 0){
-      removal_columns_most <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
-      removal_columns <- c(removal_columns, removal_columns_most)
+  if (removal_mode != "threshold"){
+    if (removal_rate_least > 0){
+      removal_columns <- get_removal_columns(train_dtm, removal_rate_least, "least", removal_mode)
+      if (removal_rate_most > 0){
+        removal_columns_most <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
+        removal_columns <- c(removal_columns, removal_columns_most)
+      }
+      train_dtm <- train_dtm[,-removal_columns]
+    } else if (removal_rate_most > 0){
+      removal_columns <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
+      train_dtm <- train_dtm[,-removal_columns]
     }
-    train_dtm <- train_dtm[,-removal_columns]
-  } else if (removal_rate_most > 0){
-    removal_columns <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
-    train_dtm <- train_dtm[,-removal_columns]
+  } else if (removal_mode == "threshold"){
+    train_dtm <- train_dtm[,colSums(train_dtm) > removal_rate_least]
+    train_dtm <- train_dtm[,colSums(train_dtm) < removal_rate_most]
   }
+  
   #if (removal_rate_least > 0 | removal_rate_most > 0){
   #  print("removal columns")
   #  print(removal_columns)
@@ -245,21 +252,35 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                          remove_numbers = TRUE, # numbers - this is the default
                          verbose = FALSE, # Turn off status bar for this demo
                          cpus = 4) # default is all available cpus on the system
-  removal_frequency <- get_occ_frequency(test_dtm, occ_rate)
   
-  test_dtm <- test_dtm[,colSums(test_dtm) > removal_frequency]
-  
-  if (removal_rate_least > 0){
-    removal_columns <- get_removal_columns(test_dtm, removal_rate_least, "least", removal_mode)
-    if (removal_rate_most > 0){
-      removal_columns_most <- get_removal_columns(test_dtm, removal_rate_most, "most", removal_mode)
-      removal_columns <- c(removal_columns, removal_columns_most)
-    }
-    test_dtm <- test_dtm[,-removal_columns]
-  } else if (removal_rate_most > 0){
-    removal_columns <- get_removal_columns(test_dtm, removal_rate_most, "most", removal_mode)
-    test_dtm <- test_dtm[,-removal_columns]
+  if (occ_rate>0){
+    #print("rows in train")
+    #print(nrow(train))
+    removal_frequency <- round(nrow(test)*occ_rate) -1
+    #print("removal frequency")
+    #print(removal_frequency)
+    test_dtm <- test_dtm[,colSums(test_dtm) > removal_frequency]
   }
+  #removal_frequency <- get_occ_frequency(test_dtm, occ_rate)
+  #test_dtm <- test_dtm[,colSums(test_dtm) > removal_frequency]
+  
+  if (removal_mode != "threshold"){
+    if (removal_rate_least > 0){
+      removal_columns <- get_removal_columns(test_dtm, removal_rate_least, "least", removal_mode)
+      if (removal_rate_most > 0){
+        removal_columns_most <- get_removal_columns(test_dtm, removal_rate_most, "most", removal_mode)
+        removal_columns <- c(removal_columns, removal_columns_most)
+      }
+      test_dtm <- test_dtm[,-removal_columns]
+    } else if (removal_rate_most > 0){
+      removal_columns <- get_removal_columns(test_dtm, removal_rate_most, "most", removal_mode)
+      test_dtm <- test_dtm[,-removal_columns]
+    }
+  } else if (removal_mode == "threshold"){
+    test_dtm <- test_dtm[,colSums(test_dtm) > removal_rate_least]
+    test_dtm <- test_dtm[,colSums(test_dtm) < removal_rate_most]
+  }
+  
   
   
   dtms <- list(train_dtm=train_dtm, test_dtm=test_dtm, train_data=train, test_data=test,split_stats=result_df)
@@ -392,7 +413,8 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
 
 get_lda_test <- function(model,
                          preds, 
-                         group_var,
+                         data,
+                         group_var, # only one in the case of t-test
                          control_vars,
                          test_method,
                          seed,
@@ -401,6 +423,20 @@ get_lda_test <- function(model,
   if (!is.null(load_dir)){
     test <- readRDS(paste0(load_dir, "/seed_", seed, "/test.rds"))
   } else {
+    #view(preds)
+    if (!(group_var %in% names(preds))){
+      print(paste0("add group_var: ", group_var))
+      preds <- bind_cols(data[group_var], preds)
+    }
+    #view(preds)
+    for (control_var in control_vars){
+      if (!(control_var %in% names(preds))){
+        print(paste0("added control var: ", control_var))
+        preds <- bind_cols(data[control_var], preds)
+      }
+    }
+    preds <- preds %>% tibble()
+    view(preds)
     test <- topic_test(topic_terms = model$summary,
                        topics_loadings = preds,
                        grouping_variable = preds[group_var],

@@ -581,17 +581,17 @@ topic_test <- function(topic_terms,
     if (test_method == "linear_regression"){
       for (variable in control_variables){
         p_adjusted <- stats::p.adjust(control_variable_summary[[variable]][["p"]],
-                                      "bonferroni",
+                                      multiple_comparison,
                                       length(multi_models))
-        control_variable_summary[[variable]][["p_adjusted"]] <- c(control_variable_summary[[variable]][["p_adjusted"]],
+        control_variable_summary[[variable]][[paste0("p_adjusted",multiple_comparison)]] <- c(control_variable_summary[[variable]][["p_adjusted"]],
                                                                   p_adjusted)
       }
     }
     if (test_method == "logistic_regression"){
       p_adjusted <- stats::p.adjust(control_variable_summary[["p"]],
-                                    "bonferroni",
+                                    multiple_comparison,
                                     length(multi_models))
-      control_variable_summary[["p_adjusted"]] <- c(control_variable_summary[["p_adjusted"]],
+      control_variable_summary[[paste0("p_adjusted",multiple_comparison)]] <- c(control_variable_summary[["p_adjusted"]],
                                                                 p_adjusted)
     }
     

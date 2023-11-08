@@ -23,6 +23,11 @@ get_relative_frequency_term_document <- function(dtm){
   return(relative_frequency_matrix)
 }
 
+name_cols_with_vocab <- function(model, col, vocabulary){
+  colnames(model[[col]]) <- as.character(unlist(vocabulary))
+  return(model)
+}
+
 # returns matrix in shape num(topics)*num(documents)
 # dim(topic_term_matrix) = num(topics)*num(terms)
 # dim(term_document_matrix) = num(terms)*num(documents)
@@ -31,7 +36,7 @@ get_topic_per_document_dist <- function(topic_term_matrix, term_document_matrix,
   num_documents <- dim(term_document_matrix)[1]
   num_words <- length(vocabulary)
   terms <- colnames(term_document_matrix)
-  colnames(topic_term_matrix) <- as.character(unlist(model$vocabulary))
+  colnames(topic_term_matrix) <- as.character(unlist(vocabulary))
   
   topic_document_matrix <- array(0, dim = c(num_documents, num_topics))
   for (i in 1:num_documents){
@@ -130,7 +135,6 @@ get_removal_frequency <- function(dtm, percent, type){
 get_dtm <- function(data_dir, # provide relative directory path to data
                     id_col,
                     data_col,
-                    group_var,
                     ngram_window,
                     stopwords,
                     removalword,
@@ -139,13 +143,15 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                     removal_rate_most,
                     removal_rate_least,
                     split,
-                    seed){
+                    seed,
+                    group_var=NULL,
+                    save_dir=NULL){
   set.seed(seed)
   
   # Data
   #text <- readRDS(data_dir) #load data
   text <- read_csv(data_dir)
-  text_cols= text[c(id_col,data_col,group_var,"Gender", "age", "PHQtot", "GADtot")] #, "minidep_scale", "miniGAD_scale")] # select columns
+  text_cols= text[c(id_col,data_col)] #, "minidep_scale", "miniGAD_scale")] # select columns
   text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
@@ -162,30 +168,35 @@ get_dtm <- function(data_dir, # provide relative directory path to data
     
   }
   
-  # Calculate counts and ratios for the training set
-  train_counts <- table(train[c(group_var)])
-  train_ratio_0 <- train_counts[1] / sum(train_counts)
-  train_ratio_1 <- train_counts[2] / sum(train_counts)
+  if (!is.null(group_var)){
+    # Calculate counts and ratios for the training set
+    train_counts <- table(train[c(group_var)])
+    train_ratio_0 <- train_counts[1] / sum(train_counts)
+    train_ratio_1 <- train_counts[2] / sum(train_counts)
+    
+    # Calculate counts and ratios for the test set
+    test_counts <- table(test[c(group_var)])
+    test_ratio_0 <- test_counts[1] / sum(test_counts)
+    test_ratio_1 <- test_counts[2] / sum(test_counts)
+    
+    # Create a DataFrame
+    result_df <- data.frame(
+      Set = c("Training", "Test"),
+      Count_0 = c(train_counts[1], test_counts[1]),
+      Count_1 = c(train_counts[2], test_counts[2]),
+      Ratio_0 = c(train_ratio_0, test_ratio_0),
+      Ratio_1 = c(train_ratio_1, test_ratio_1)
+    )
+  } else {
+    result_df <- NULL
+  }
   
-  # Calculate counts and ratios for the test set
-  test_counts <- table(test[c(group_var)])
-  test_ratio_0 <- test_counts[1] / sum(test_counts)
-  test_ratio_1 <- test_counts[2] / sum(test_counts)
-  
-  # Create a DataFrame
-  result_df <- data.frame(
-    Set = c("Training", "Test"),
-    Count_0 = c(train_counts[1], test_counts[1]),
-    Count_1 = c(train_counts[2], test_counts[2]),
-    Ratio_0 = c(train_ratio_0, test_ratio_0),
-    Ratio_1 = c(train_ratio_1, test_ratio_1)
-  )
   
   # create a document term matrix for training set
   train_dtm <- CreateDtm(doc_vec = train[[data_col]], # character vector of documents
                    doc_names = train[[id_col]], # document names
                    ngram_window = ngram_window, # minimum and maximum n-gram length
-                   #stopword_vec = stopwords::stopwords("en", source = "snowball"),
+                   stopword_vec = stopwords, #::stopwords("en", source = "snowball"),
                    lower = TRUE, # lowercase - this is the default value
                    remove_punctuation = TRUE, # punctuation - this is the default
                    remove_numbers = TRUE, # numbers - this is the default
@@ -246,7 +257,20 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   }
   
   
-  return(list(train_dtm=train_dtm, test_dtm=test_dtm, train_data=train, test_data=test,split_stats=result_df))
+  dtms <- list(train_dtm=train_dtm, test_dtm=test_dtm, train_data=train, test_data=test,split_stats=result_df)
+
+  if (!is.null(save_dir)){
+    if (!dir.exists(save_dir)) {
+      # Create the directory
+      dir.create(save_dir)
+      cat("Directory created successfully.\n")
+    } 
+    if(!dir.exists(paste0(save_dir, "/seed_", seed))){
+      dir.create(paste0(save_dir, "/seed_", seed))
+    }
+    saveRDS(model, paste0(save_dir, "/seed_", seed, "/dtms.rds"))
+  }
+  return(dtms)
 }
 
 get_lda_model <- function(model_type,
@@ -266,7 +290,7 @@ get_lda_model <- function(model_type,
                                    num_topics = num_topics,
                                    num_top_words = num_top_words,
                                    num_iterations = num_iterations)
-    } else {
+    } else if (model_type == "mallet"){
       model <- get_mallet_model(dtm = dtm,
                                 num_topics = num_topics,
                                 num_top_words = num_top_words,
@@ -315,16 +339,19 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     preds <- readRDS(paste0(load_dir, "/seed_", seed, "/preds.rds"))
   } else {
     #data <- read.csv(paste0("./data/", data_dir))
-    if (mode=="predict"){
-      preds <- predict(model$pred_model,
+    if (mode=="function"){
+      if (model$pred_model == NULL){
+        model$pred_model <- model
+      }
+      preds <- predict(model$pred_model,  #model$pred_model, if mallet model
                        dtm,
                        method = "gibbs",
                        iterations = num_iterations,
                        burnin = 180,
                        cpus = 4)
     } else if (mode=="custom"){
-      print("custom")
-      preds <- get_topic_per_document_dist(topic_term_matrix = model$phi,
+      #print("custom")
+      preds <- get_topic_per_document_dist(topic_term_matrix = model$pred_model$phi,
                                            term_document_matrix = get_relative_frequency_term_document(dtms$train_dtm),
                                            vocabulary = model$vocabulary)
     }
@@ -388,7 +415,14 @@ get_lda_test <- function(model,
     if(!dir.exists(paste0(save_dir, "/seed_", seed))){
       dir.create(paste0(save_dir, "/seed_", seed))
     }
-    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test.rds"))
+    if (test_method=="textTrain_regression"){
+      df <- list(variable = group_var,
+                estimate = test$estimate,
+                t_value = test$statistic,
+                p_value = test$p.value)
+      write_csv(data.frame(df), paste0(save_dir, "/seed_", seed, "/textTrain_regression.csv"))
+    }
+    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test_",test_method, ".rds"))
   }
   return(test)
 }
@@ -466,8 +500,15 @@ get_mallet_model <- function(dtm,
   
   pred_model <- list()
   pred_model$phi <- mallet.topic.words(model, smoothed=TRUE, normalized=TRUE)
+  colnames(pred_model$phi) <- as.character(unlist(return_model$vocabulary))
   pred_model$theta <- mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)
+  k <- ncol(pred_model$theta) # Specify the value of k  
+  new_col_names <- paste("t", 1:k, sep = "_") # Generate new column names
+  colnames(pred_model$theta) <- new_col_names # Assign new column names to the dataframe
   pred_model$alpha <- model$alpha
+  pred_model$gamma <- CalcGamma(phi = pred_model$phi, 
+                                theta = pred_model$theta)
+  
   pred_model$data <- dtm
   names(pred_model)
   class(pred_model) <- "lda_topic_model"

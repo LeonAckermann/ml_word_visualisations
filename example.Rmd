@@ -25,7 +25,7 @@ Folder [results](./results) stores the results of your experiment
 data_dir <- "./data/depression_anxiety_cleaned.csv"
 data_col <- "dep_all_words"
 id_col <- "unique_id"
-group_col <- "minidep_diagnose" # now necessary, but only used for t-test
+group_col <- NULL # now necessary, but only used for t-test
 ```
 
 **Document Term Matrix** 
@@ -77,8 +77,10 @@ save_dir <- paste0("./results/",
             "_most_",removal_num_most, 
             "_least_", removal_num_least, 
             "_occ_", occ_rate, 
-            "_pred_", mode)
-
+            "_pred_", pred_mode)
+if (!dir.exists("./results")) {
+  dir.create("./results")
+}
 ```
 
 ##### 0.3 Imports

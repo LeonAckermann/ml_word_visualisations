@@ -1,6 +1,6 @@
 library(text)
 library(reticulate)
-use_condaenv("text_package", required = TRUE)
+#use_condaenv("text_package", required = TRUE)
 library(recipes)
 #mallet, the javascript for textmining
 # @param topic_model (list object) LDA topic from textmineR with model$summary (see: https://cran.r-project.org/web/packages/textmineR/vignettes/c_topic_modeling.html)

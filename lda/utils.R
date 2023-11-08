@@ -521,8 +521,8 @@ topic_test <- function(topic_terms,
     print(preds)
     print(test_method)
     if (test_method == "logistic_regression"){
-      print(control_variables[1])
-      print(z_lda_topics[1])
+      #print(control_variables[1])
+      #print(z_lda_topics[1])
       for (topic in z_lda_topics){
         
         multi_models[[paste0("t_", topic)]] <- glm(paste0("z_",control_variables[1], " ~ ", topic), data = preds)
@@ -531,7 +531,7 @@ topic_test <- function(topic_terms,
     
     
     #print(multi_models)
-    print(length(multi_models))
+    #print(length(multi_models))
     
     control_variable_summary <- list()
     topics <- c()
@@ -620,7 +620,7 @@ topic_test <- function(topic_terms,
     }
     
     dims <- as.data.frame(preds) %>% select(contains("Dim"))
-    view(dims)
+    #view(dims)
     #dims <- step_zv(dims)
     dims <- as_tibble(dims)
     preds <- as_tibble(preds)

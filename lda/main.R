@@ -120,10 +120,10 @@ get_removal_frequency <- function(dtm, percent, type){
   # Print the terms with the highest frequencies (e.g., top 10 terms)
   #top_terms <- head(term_frequency_df, n = 10)
   removal_index <- nrow(term_frequency_df)*percent
-  print(nrow(term_frequency_df))
+  # print(nrow(term_frequency_df))
   if (type=="most"){
     removal_index <- round(removal_index) 
-    print(removal_index)
+    # print(removal_index)
   } else {
     removal_index <- nrow(term_frequency_df) - round(removal_index) # calculates index of term that has highest freqency of all percent least frequent words
   }
@@ -135,6 +135,8 @@ get_removal_frequency <- function(dtm, percent, type){
 get_dtm <- function(data_dir, # provide relative directory path to data
                     id_col,
                     data_col,
+                    group_var,
+                    cor_var,
                     ngram_window,
                     stopwords,
                     removalword,
@@ -144,14 +146,17 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                     removal_rate_least,
                     split,
                     seed,
-                    group_var=NULL,
                     save_dir=NULL){
   set.seed(seed)
   
   # Data
   #text <- readRDS(data_dir) #load data
   text <- read_csv(data_dir)
-  text_cols= text[c(id_col,data_col)] #, "minidep_scale", "miniGAD_scale")] # select columns
+  if (is.null(group_var)){
+    text_cols= text[c(id_col,data_col,cor_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
+  } else {
+    text_cols= text[c(id_col,data_col,cor_var, group_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
+  }
   text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
@@ -203,11 +208,11 @@ get_dtm <- function(data_dir, # provide relative directory path to data
                    verbose = FALSE, # Turn off status bar for this demo
                    cpus = 4) # default is all available cpus on the system
   if (occ_rate>0){
-    print("rows in train")
-    print(nrow(train))
+    #print("rows in train")
+    #print(nrow(train))
     removal_frequency <- round(nrow(train)*occ_rate) -1
-    print("removal frequency")
-    print(removal_frequency)
+    #print("removal frequency")
+    #print(removal_frequency)
     train_dtm <- train_dtm[,colSums(train_dtm) > removal_frequency]
   }
   if (removal_rate_least > 0){
@@ -221,10 +226,10 @@ get_dtm <- function(data_dir, # provide relative directory path to data
     removal_columns <- get_removal_columns(train_dtm, removal_rate_most, "most", removal_mode)
     train_dtm <- train_dtm[,-removal_columns]
   }
-  if (removal_rate_least > 0 | removal_rate_most > 0){
-    print("removal columns")
-    print(removal_columns)
-  }
+  #if (removal_rate_least > 0 | removal_rate_most > 0){
+  #  print("removal columns")
+  #  print(removal_columns)
+  #}
   
   
   
@@ -268,6 +273,7 @@ get_dtm <- function(data_dir, # provide relative directory path to data
     if(!dir.exists(paste0(save_dir, "/seed_", seed))){
       dir.create(paste0(save_dir, "/seed_", seed))
     }
+    print(paste0("The Dtm, data, and summary are saved in", save_dir,"/seed_", seed,"/dtms.rds"))
     saveRDS(model, paste0(save_dir, "/seed_", seed, "/dtms.rds"))
   }
   return(dtms)
@@ -308,7 +314,7 @@ get_lda_model <- function(model_type,
     model$summary[order(model$summary$prevalence, decreasing = TRUE) , ][ 1:10 , ]
   }
   
-  print(save_dir)
+  # print(save_dir)
   
   if (!is.null(save_dir)){
     if (!dir.exists(save_dir)) {
@@ -319,6 +325,7 @@ get_lda_model <- function(model_type,
     if(!dir.exists(paste0(save_dir, "/seed_", seed))){
       dir.create(paste0(save_dir, "/seed_", seed))
     }
+    print(paste0("The Model is saved in", save_dir,"/seed_", seed,"/model.rds"))
     saveRDS(model, paste0(save_dir, "/seed_", seed, "/model.rds"))
   }
   
@@ -340,7 +347,7 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
   } else {
     #data <- read.csv(paste0("./data/", data_dir))
     if (mode=="function"){
-      if (model$pred_model == NULL){
+      if (is.null(model$pred_model)){
         model$pred_model <- model
       }
       preds <- predict(model$pred_model,  #model$pred_model, if mallet model
@@ -359,9 +366,10 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     #preds <- model$topic_docs
     preds <- as_tibble(preds)
     colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
-    categories <- data[group_var]
-    #view(categories)
-    preds <- bind_cols(categories, preds)
+    if (!is.null(group_var)){
+      categories <- data[group_var]
+      preds <- bind_cols(categories, preds)
+    }
     preds <- preds %>% tibble()
 
   }
@@ -375,8 +383,7 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
     if(!dir.exists(paste0(save_dir, "/seed_", seed))){
       dir.create(paste0(save_dir, "/seed_", seed))
     }
-    print(save_dir)
-    view(preds)
+    print(paste0("Predictions are saved in", save_dir,"/seed_", seed,"/preds.rds"))
     saveRDS(preds, paste0(save_dir, "/seed_", seed, "/preds.rds"))
   }
   
@@ -574,7 +581,7 @@ get_topic_test <- function(model_type,
                    verbose = FALSE, # Turn off status bar for this demo
                    cpus = 4) # default is all available cpus on the system
   dtm <- dtm[,colSums(dtm) > 2] # remove words with occurences < 2
-  view(dtm)
+  #view(dtm)
   if (load){
     if (model_type == "textmineR"){
       model <- readRDS(paste0(load_dir, "/seed_", seed, "/model.rds"))

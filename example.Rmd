@@ -25,7 +25,8 @@ Folder [results](./results) stores the results of your experiment
 data_dir <- "./data/depression_anxiety_cleaned.csv"
 data_col <- "dep_all_words"
 id_col <- "unique_id"
-group_col <- NULL # now necessary, but only used for t-test
+group_var <- NULL # now necessary, but only used for t-test
+cor_var <- "PHQtot"
 ```
 
 **Document Term Matrix** 
@@ -102,7 +103,8 @@ source("./lda/main.R")
 dtms <- get_dtm(data_dir = data_dir,
                 id_col = id_col,
                 data_col = data_col,
-                group_var = group_col,
+                group_var = group_col, # used if t-test, is binary, so this is optional
+                cor_var = cor_var, # used for regression, correlation
                 ngram_window = ngram_window,
                 stopwords = stopwords,
                 removalword = removalword,
@@ -136,7 +138,6 @@ preds <- get_lda_preds(model = model,
                         seed=seed,
                         mode=mode,
                         save_dir = save_dir)
-view(preds)
 ```
 
 #### 4. Analysis

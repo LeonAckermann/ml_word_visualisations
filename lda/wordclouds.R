@@ -1,96 +1,89 @@
-get_test_preprocessing_1 <- function(topic_res){
-  topic_res1 <- topic_res[[1]] %>% tibble::as_tibble() %>% filter(adjusted_p.value < 0.05)
-  topic_res2 <- topic_res1[,
-                           c( "p.value","cohen_d","label_1", "adjusted_p.value", "top_terms" )]
-  names(topic_res2)[3] <- c("topic")
-  names(topic_res2)[4] <- c("p_value")
-  return(topic_res)
-}
+library(ggwordcloud)
 
-get_test_preprocessing_2 <- function(topic_res){
-  topic_res2 <- tibble::as_tibble(topic_res2)
-  data <- tibble::as_tibble(list(category = topic_res2[["topic"]][1:2],
-                                 cohen_d = topic_res2[["cohen_d"]][1:2],
-                                 words = topic_res2[["top_terms"]][1:2]))
-  names(data) <- c("category", "cohen_d", "words")
-  data$category <- as.character(data$category)
-  
-  # Flatten the words data to create a similar weight for each word
-  words_vector <- unlist(strsplit(as.character(data$words), ", "))
-  # TODO 1: Add the loadings score of the top words under each topic
-  words_df <- data.frame(words = words_vector, freq = seq(35, 36, length.out = length(words_vector)))
-  return(list(data=data, words_df=words_df))
-}
 
-# Function to find category
-find_category <- function(word) {
-  for (category in names(words_list)) {
-    if (word %in% words_list[[category]]) {
-      return(category)
+assign_phi_to_words <- function(df_list, phi){
+  for (i in 1:length(df_list)){
+    df <- df_list[[i]] 
+    phi_vector <- c()
+    for (j in 1:nrow(df)){
+      word <- df[j,]
+      phi_vector <- c(phi_vector,phi[paste0("t_",i),][word])
     }
+    df$phi <- phi_vector
+    df_list[[i]] <- df
   }
-  return(NA)
-}
-
-get_test_preprocessing_3 <- function(topic_res){
-  data <- topic_res$data
-  words_df <- topic_res$words_df
-  # Assuming your dataframes are named 'data' and 'words_df'
-  data$words1 <- strsplit(data$words, ", ")
-  
-  # Create a named list of words for each category
-  words_list <- setNames(data$words1, data$category) %>% tibble::as_tibble()
-  # Add 'category' column to 'words_df'
-  words_df <- words_df %>% mutate(category = sapply(words, find_category)) %>% tibble::as_tibble()
-  
-  # Reshape 'data' dataframe
-  temp <- data %>% select(category, cohen_d) %>% tibble::as_tibble()
-  temp$category <- as.character(temp$category)
-  
-  # Left join 'words_df' with 'data_reshaped'
-  words_df <- words_df %>% dplyr:::left_join(temp, by = "category")
-  
-  # !!!! arbitrarily opposite color setting to meet the output logic
-  words_df <- words_df %>% mutate(color = ifelse(category == "nothing", "red3","lightgreen"))
-  return(list(data=data, words_df=words_df))
+  return(df_list)
 }
 
 
-get_plot <- function(topic_res){
-  data <- topic_res$data
-  words_df <- topic_res$words_df
-  
-  
-  # p1 - cohen_d
-  p1 <- ggplot(data[,1:2], aes(x = category, y = cohen_d, 
-                               #color = factor(category)
-                               )) + 
-    geom_col(aes(fill = category)) + 
-    scale_fill_manual(values = c("red"  , "green")) +
-    # geom_errorbar(aes(ymin = error_low, ymax = error_high), width = 0.1) +
-    theme_bw() +
-    #   Adjust the aesthetics inside geom_text_wordcloud()
-    ggwordcloud::geom_text_wordcloud(data = words_df, 
-                                     aes(label = words, 
-                                         area = freq * 1200, 
-                                         size = freq * 3,
-                                         colour=color,
-                                         y = -1 * sign(cohen_d) * min(abs(cohen_d)))) +
-    coord_flip() +
-    scale_x_discrete(limits = c("nothing", "ending")) +
-    theme(axis.title.y = element_blank(),
-          axis.text.y = element_blank(), 
-          axis.ticks.y = element_blank(),
-          legend.position = "top") + 
-    labs(title = "Cohen's d of topics")  +
-    theme(plot.title = element_text(size = 24),
-          axis.title.x = element_text(size = 24),
-          axis.title.y = element_text(size = 24),
-          axis.text.x = element_text(size = 20),
-          axis.text.y = element_text(size = 20),
-          strip.text.x = element_text(size = 24),
-          legend.text = element_text(size = 14)
-    )
-  # TODO 2, may need a discussion with Oscar: statistical testing result with asterisks, not implemented yet
-  # + geom_text(aes(label = asterisks, vjust = ifelse(category == "Financial Security", 1, -1)), hjust = -0.6)
+create_topic_words_dfs <- function(summary){
+  n <- nrow(summary)
+  df_list <- vector("list", n)
+  # Create and name the dataframes in a loop
+  for (i in 1:n) {
+    word_vector <- unlist(strsplit(summary[paste0("t_",i),]$top_terms, ", "))
+    df <- data.frame(Word = word_vector) # Create an empty dataframe
+    df_list[[i]] <- df  # Add the dataframe to the list
+    name <- paste("t", i, sep = "_")  # Create the name for the dataframe
+    assign(name, df_list[[i]])  # Assign the dataframe to a variable with the specified name
+  }
+  return(df_list)
+}
+
+create_plots <- function(df_list, 
+                         test, 
+                         test_type,
+                         color_negative_cor,
+                         color_positive_cor,
+                         save_dir="."){
+  for (i in 1:length(df_list)){
+    #view(df_list[[i]])
+    if (test_type == "linear_regression"){
+      estimate_col <- "estimate" # grep(partial_name, data_frame_names, value = TRUE)
+    } else if (test_type == "t-test"){
+      estimate_col <- "cohens d" # probably doesnt work yet
+    }
+    estimate <- test[i,][[grep(estimate_col, colnames(test), value=TRUE)]]# $PHQtot.estimate
+    p_adjusted <- test[i,][[grep("p_adjusted", colnames(test), value=TRUE)]] # $PHQtot.p_adjustedfdr
+    if (estimate < 0){
+      color_scheme <- color_negative_cor # scale_color_gradient(low = "darkgreen", high = "green")
+    } else {
+      color_scheme <- color_positive_cor # scale_color_gradient(low = "darkred", high = "red")
+    }
+    plot <- ggplot(df_list[[i]], aes(label = Word, size = phi, color = phi)) +
+      geom_text_wordcloud() +
+      scale_size_area(max_size = 10) +
+      theme_minimal() +
+      color_scheme
+    if (!dir.exists(save_dir)) {
+        # Create the directory
+      dir.create(save_dir)
+      cat("Directory created successfully.\n")
+    } 
+    if(!dir.exists(paste0(save_dir, "/seed_", seed, "/wordclouds"))){
+      dir.create(paste0(save_dir, "/seed_", seed, "/wordclouds"))
+    }
+    ggsave(paste0(save_dir,"/seed_", seed, "/wordclouds/t_", i, "_r_", estimate, "_p_", p_adjusted,".png"), plot = plot, width = 10, height = 8, units = "in")
+      
+
+  }
+}
+
+
+plot_wordclouds <- function(model,
+                            test,
+                            test_type,
+                            color_negative_cor,
+                            color_positive_cor,
+                            save_dir,
+                            seed){
+  df_list <- create_topic_words_dfs(model$summary)
+  df_list <- assign_phi_to_words(df_list, model$phi)
+  create_plots(df_list = df_list, 
+               test=test, 
+               test_type="linear_regression",
+               color_negative_cor = color_negative_cor,
+               color_positive_cor = color_positive_cor,
+               save_dir=save_dir)
+  print(paste0("The plots are saved in ", save_dir, "/seed", seed, "/wordclouds"))
 }

@@ -55,7 +55,7 @@ pred_mode <- "function" # or "custom" for mallet
 **Analysis**
 ```{r}
 cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
-control_vars <- c("PHQtot", "GADtot") # vector of variables to control analysis with if test_method is linear_regression
+control_vars <- c("PHQtot")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
 ```
 
@@ -96,6 +96,7 @@ library(tokenizers)
 library(text2vec)
 library(quanteda)
 source("./lda/main.R")
+source("./lda/wordclouds.R")
 ```
 
 #### 1. Compute Document Term Matrix
@@ -136,7 +137,7 @@ preds <- get_lda_preds(model = model,
                         dtm = dtms$train_dtm,
                         group_var = NULL,
                         seed=seed,
-                        mode=mode,
+                        mode=pred_mode,
                         save_dir = save_dir)
 view(preds)
 ```
@@ -163,9 +164,20 @@ view(dtms$train_data)
 test <- get_lda_test(model=model,
                     preds=preds,
                     data=dtms$test_data,
-                    group_var = cor_var,
+                    group_var = "PHQtot",
                     control_vars = control_vars,
                     test_method = "linear_regression",
                     seed=seed,
                     save_dir=save_dir)
+view(test)
+```
+
+```{r}
+plot_wordclouds(model = model,
+                test = test,
+                test_type = "linear_regression",
+                color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
+                color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
+                save_dir=save_dir,
+                seed=seed)
 ```

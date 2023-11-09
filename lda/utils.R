@@ -583,7 +583,7 @@ topic_test <- function(topic_terms,
         p_adjusted <- stats::p.adjust(control_variable_summary[[variable]][["p"]],
                                       multiple_comparison,
                                       length(multi_models))
-        control_variable_summary[[variable]][[paste0("p_adjusted",multiple_comparison)]] <- c(control_variable_summary[[variable]][["p_adjusted"]],
+        control_variable_summary[[variable]][[paste0("p_adjusted")]] <- c(control_variable_summary[[variable]][["p_adjusted"]],
                                                                   p_adjusted)
       }
     }
@@ -591,7 +591,7 @@ topic_test <- function(topic_terms,
       p_adjusted <- stats::p.adjust(control_variable_summary[["p"]],
                                     multiple_comparison,
                                     length(multi_models))
-      control_variable_summary[[paste0("p_adjusted",multiple_comparison)]] <- c(control_variable_summary[["p_adjusted"]],
+      control_variable_summary[[paste0("p_adjusted")]] <- c(control_variable_summary[["p_adjusted"]],
                                                                 p_adjusted)
     }
     

@@ -295,7 +295,7 @@ get_dtm <- function(data_dir, # provide relative directory path to data
       dir.create(paste0(save_dir, "/seed_", seed))
     }
     print(paste0("The Dtm, data, and summary are saved in", save_dir,"/seed_", seed,"/dtms.rds"))
-    saveRDS(model, paste0(save_dir, "/seed_", seed, "/dtms.rds"))
+    saveRDS(dtms, paste0(save_dir, "/seed_", seed, "/dtms.rds"))
   }
   return(dtms)
 }

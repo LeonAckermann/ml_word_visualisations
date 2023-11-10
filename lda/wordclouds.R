@@ -36,9 +36,12 @@ create_plots <- function(df_list,
                          cor_var,
                          color_negative_cor,
                          color_positive_cor,
-                         plot_topics_idx,
-                         p_threshold,
+                         plot_topics_idx=NULL,
+                         p_threshold=NULL,
                          save_dir="."){
+  if (is.null(plot_topics_idx)){
+    plot_topics_idx <- seq(1, length(df_list))
+  } 
   for (i in plot_topics_idx){
   #for (i in 1:length(df_list)){
     #view(df_list[[i]])
@@ -57,12 +60,17 @@ create_plots <- function(df_list,
     print(p_adjusted)
     
     #if (grep(paste0(i, plo)))
+    if (is.null(p_threshold)){
+      p_threshold <- p_adjusted +1 
+    }
+    
+    print(is.null(p_threshold))
     if (p_adjusted < p_threshold){
       
       
       #estimate <- test[i,][[grep(estimate_col, colnames(test), value=TRUE)]]# $PHQtot.estimate
       #p_adjusted <- test[i,][[grep("p_adjusted", colnames(test), value=TRUE)]] # $PHQtot.p_adjustedfdr
-      if (estimate < threshold){
+      if (estimate < 0){
         color_scheme <- color_negative_cor # scale_color_gradient(low = "darkgreen", high = "green")
       } else {
         color_scheme <- color_positive_cor # scale_color_gradient(low = "darkred", high = "red")

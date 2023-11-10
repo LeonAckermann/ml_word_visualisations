@@ -138,19 +138,43 @@ preds <- get_lda_preds(model = model,
                         seed=seed,
                         mode=pred_mode,
                         save_dir = save_dir)
+view(preds)
 ```
 
 #### 4. Analysis
 ##### 4.1 textTrain_regression
 ```{r}
-test <- get_lda_test(model=model,
+
+preds <- read.csv("./bert_topic/results/multi-mpnet/dep_text_topic_distr.csv")
+train_data <- read.csv("./bert_topic/bert_topic_df.csv")
+# Get the number of columns
+
+```
+
+
+```{r}
+embedding_models = c("miniLM", "mpnet", "multi-mpnet", "distilroberta")
+for (data_var in c("dep_all_phrases", "dep_all_words", "wor_all_words", "wor_all_phrases", "wor_text")){
+  for (embedding_model in embedding_models){
+    preds <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/topic_distr.csv"))
+    train_data <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/data.csv"))
+    if (grepl("dep", data_var)){
+      group_var <- "PHQtot"
+    } else {
+      group_var <- "GADtot"
+    }
+    test <- get_lda_test(model=model,
                     preds=preds,
-                    data=dtms$train_data,
-                    group_var = cor_var,
-                    control_vars = control_vars,
+                    data=train_data,
+                    group_var = group_var,
+                    control_vars = c(data_var),
                     test_method = "textTrain_regression",
                     seed=seed,
-                    save_dir=save_dir)
+                    save_dir=paste0("./bert_topic/results/",data_var,"/",embedding_model))
+  }
+}
+  
+
 ```
 
 ```{r}
@@ -175,6 +199,8 @@ plot_wordclouds(model = model,
                 test = test,
                 test_type = "linear_regression",
                 cor_var = "PHQtot",
+                plot_topics_idx = c(1,2,3,4),
+                p_threshold = 0.000005,
                 color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
                 color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
                 save_dir=save_dir,

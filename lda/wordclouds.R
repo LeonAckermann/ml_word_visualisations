@@ -33,18 +33,25 @@ create_topic_words_dfs <- function(summary){
 create_plots <- function(df_list, 
                          test, 
                          test_type,
+                         cor_var,
                          color_negative_cor,
                          color_positive_cor,
                          save_dir="."){
   for (i in 1:length(df_list)){
     #view(df_list[[i]])
     if (test_type == "linear_regression"){
-      estimate_col <- "estimate" # grep(partial_name, data_frame_names, value = TRUE)
+      estimate_col <- paste0(cor_var,".estimate") # grep(partial_name, data_frame_names, value = TRUE)
+      p_adjusted <- paste0(cor_var,".p_adjusted")
     } else if (test_type == "t-test"){
       estimate_col <- "cohens d" # probably doesnt work yet
+    } else if (test_type == "logistic_regression"){
+      estimate_col <- "estimate"
+      estimate_col <- "p_adjustedfdr"
     }
-    estimate <- test[i,][[grep(estimate_col, colnames(test), value=TRUE)]]# $PHQtot.estimate
-    p_adjusted <- test[i,][[grep("p_adjusted", colnames(test), value=TRUE)]] # $PHQtot.p_adjustedfdr
+    estimate <- test[i,][[estimate_col]]# $PHQtot.estimate
+    p_adjusted <- test[i,][[estimate_col]] # $PHQtot.p_adjustedfdr
+    #estimate <- test[i,][[grep(estimate_col, colnames(test), value=TRUE)]]# $PHQtot.estimate
+    #p_adjusted <- test[i,][[grep("p_adjusted", colnames(test), value=TRUE)]] # $PHQtot.p_adjustedfdr
     if (estimate < 0){
       color_scheme <- color_negative_cor # scale_color_gradient(low = "darkgreen", high = "green")
     } else {
@@ -73,6 +80,7 @@ create_plots <- function(df_list,
 plot_wordclouds <- function(model,
                             test,
                             test_type,
+                            cor_var,
                             color_negative_cor,
                             color_positive_cor,
                             save_dir,
@@ -82,6 +90,7 @@ plot_wordclouds <- function(model,
   create_plots(df_list = df_list, 
                test=test, 
                test_type="linear_regression",
+               cor_var=cor_var,
                color_negative_cor = color_negative_cor,
                color_positive_cor = color_positive_cor,
                save_dir=save_dir)

@@ -1,0 +1,140 @@
+```{r}
+test <- readRDS("./typical_topic.rds")
+```
+
+```{r}
+source("wordclouds.R")
+test1 <- get_test_preprocessing_1(test)
+view(test1)
+```
+
+```{r}
+source("wordclouds.R")
+test2 <- get_test_preprocessing_2(test1)
+view(test2)
+```
+
+```{r}
+source("wordclouds.R")
+test3 <- get_test_preprocessing_3(test2)
+view(test3)
+```
+
+```{r}
+preds <- readRDS("../results/textmineR_dep_all_words_20_most_1_least_0_occ_0_pred_function/seed_1234/preds.rds")
+model <- readRDS("../results/textmineR_dep_all_words_20_most_1_least_0_occ_0_pred_function/seed_1234/model.rds")
+unlist(model$summary["t_1",]$top_terms)
+model$phi["t_1",][["anxious"]]
+```
+
+```{r}
+view(model$summary)
+```
+
+```{r}
+create_topic_words_dfs <- function(summary){
+  n <- nrow(summary)
+  df_list <- vector("list", n)
+  # Create and name the dataframes in a loop
+  for (i in 1:n) {
+    word_vector <- unlist(strsplit(summary[paste0("t_",i),]$top_terms, ", "))
+    df <- data.frame(Word = word_vector) # Create an empty dataframe
+    df_list[[i]] <- df  # Add the dataframe to the list
+    name <- paste("t", i, sep = "_")  # Create the name for the dataframe
+    assign(name, df_list[[i]])  # Assign the dataframe to a variable with the specified name
+  }
+  return(df_list)
+}
+result <- create_topic_words_dfs(model$summary)
+result
+```
+
+```{r}
+assign_phi_to_words <- function(df_list, phi){
+  for (i in 1:length(df_list)){
+    df <- df_list[[i]] 
+    phi_vector <- c()
+    for (j in 1:nrow(df)){
+      print(i)
+      print(j)
+      word <- df[j,]
+      print(word)
+      phi_vector <- c(phi_vector,phi[paste0("t_",i),][word])
+    }
+    df$phi <- phi_vector
+    df_list[[i]] <- df
+  }
+  return(df_list)
+}
+
+result2 <- assign_phi_to_words(result, model$phi)
+result2
+```
+
+
+```{r}
+#install.packages("ggwordcloud")
+library(ggwordcloud)
+```
+
+
+```{r}
+# Assuming you have already created your ggplot
+your_plot <- ggplot(result2[[1]], aes(label = Word, size = phi, color = phi)) +
+  geom_text_wordcloud() +
+  scale_size_area(max_size = 10) +
+  theme_minimal() + 
+  scale_color_gradient(low = "darkred", high = "red")
+
+# Save the plot to a file (e.g., in PNG format)
+ggsave("your_plot.png", plot = your_plot, width = 10, height = 8, units = "in")
+```
+
+```{r}
+result2[[1]]
+
+```
+
+
+
+```{r}
+view(test)
+library(ggwordcloud)
+
+create_plots <- function(df_list, 
+                         test, 
+                         test_type,
+                         color_negative_cor,
+                         color_positive_cor,
+                         save_dir){
+  for (i in 1:length(df_list)){
+    view(df_list[[i]])
+    if (test_type == "linear_regression"){
+      estimate_col <- "estimate" # grep(partial_name, data_frame_names, value = TRUE)
+    } else if (test_type == "t-test"){
+      estimate_col <- "cohens d" # probably doesnt work yet
+    }
+    estimate <- test[i,][[grep(estimate_col, colnames(test), value=TRUE)]]# $PHQtot.estimate
+    p_adjusted <- test[i,][[grep("p_adjusted", colnames(test), value=TRUE)]] # $PHQtot.p_adjustedfdr
+    if (estimate < 0){
+      color_scheme <- color_negative_cor # scale_color_gradient(low = "darkgreen", high = "green")
+    } else {
+      color_scheme <- color_positive_cor # scale_color_gradient(low = "darkred", high = "red")
+    }
+    plot <- ggplot(df_list[[i]], aes(label = Word, size = phi, color = phi)) +
+      geom_text_wordcloud() +
+      scale_size_area(max_size = 10) +
+      theme_minimal() +
+      color_scheme
+    ggsave(paste0(save_dir,"/plot_t_", i, "_", estimate, "_", p_adjusted,".png"), plot = plot, width = 10, height = 8, units = "in")
+  }
+}
+
+create_plots(df_list = result2, 
+             test=test, 
+             test_type="linear_regression",
+             color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
+             color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
+             save_dir="."
+             )
+```

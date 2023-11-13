@@ -18,7 +18,7 @@ Folder [results](./results) stores the results of your experiment
 
 ### LDA
 #### 0. Preparation
-#### 0.1 Set (hyper)parameters
+  #### 0.1 Set (hyper)parameters
 
 **Data** 
 ```{r}
@@ -44,12 +44,27 @@ split <- 1
 
 **LDA** 
 ```{r}
-model_type <- "textmineR" # or "mallet"
+model_type <- "bertopic" # or "mallet"
 num_topics <- 20
 num_top_words <- 10
 num_train_iterations <- 2000
 num_pred_iterations <- 200
 pred_mode <- "function" # or "custom" for mallet
+```
+
+**BERTopic**
+```{r}
+model_type <- "bertopic" # or "mallet"
+data_col <- "dep_text"
+embedding_model <- "distilroberta"
+umap_model <- "default"
+hdbscan_model <- "default"
+vectorizer_model <- "default"
+representation_model <- "default"
+num_top_words <- 10
+stop_words = "english"
+n_gram_window <- c(1,3)
+seed=1234
 ```
 
 **Analysis**
@@ -74,11 +89,12 @@ All objects created within the pipeline are created in the directory below. Thes
 save_dir <- paste0("./results/",
             model_type,"_",
             data_col, "_",
-            num_topics, 
-            "_most_",removal_num_most, 
-            "_least_", removal_num_least, 
-            "_occ_", occ_rate, 
-            "_pred_", pred_mode)
+            "embed_", embedding_model)#,
+            #num_topics, 
+            #"_most_",removal_num_most, 
+            #"_least_", removal_num_least, 
+            #"_occ_", occ_rate, 
+            #"_pred_", pred_mode)
 if (!dir.exists("./results")) {
   dir.create("./results")
 }
@@ -95,8 +111,9 @@ library(rJava)
 library(tokenizers)
 library(text2vec)
 library(quanteda)
-source("./lda/main.R")
-source("./lda/wordclouds.R")
+source("./topic_modeling/lda/main.R")
+source("./topic_modeling/lda/wordclouds.R")
+
 ```
 
 #### 1. Compute Document Term Matrix
@@ -117,6 +134,9 @@ dtms <- get_dtm(data_dir = data_dir,
                 seed=seed,
                 save_dir=save_dir)
 ```
+
+
+
 #### 2. Create LDA Model
 ```{r}
 model <- get_lda_model(model_type=model_type,
@@ -128,9 +148,31 @@ model <- get_lda_model(model_type=model_type,
                         save_dir=save_dir)
 ```
 
+
+
+#### 2.2 Create bert topic model
+```{r}
+data <- data.frame(read_csv("./data/depression_anxiety_cleaned.csv"))
+models <- get_bertopic_model(data=data,
+                        data_var=data_col,
+                        embedding_model=embedding_model,
+                        umap_model=umap_model,
+                        hdbscan_model=hdbscan_model,
+                        vectorizer_model=vectorizer_model,
+                        representation_model=representation_model,
+                        num_top_words=num_top_words,
+                        n_gram_range=n_gram_window,
+                        stop_words=stop_words,
+                        save_dir=save_dir)
+```
+
+```{r}
+models[2]
+```
+
 #### 3. Create Predictions
 ```{r}
-preds <- get_lda_preds(model = model,
+preds <- get_lda_preds(model = models$model,
                         num_iterations=num_pred_iterations,
                         data = dtms$train_data,
                         dtm = dtms$train_dtm,
@@ -144,11 +186,26 @@ view(preds)
 #### 4. Analysis
 ##### 4.1 textTrain_regression
 ```{r}
-
-preds <- read.csv("./bert_topic/results/multi-mpnet/dep_text_topic_distr.csv")
-train_data <- read.csv("./bert_topic/bert_topic_df.csv")
+print(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
+#preds <- read.csv(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
+#train_data <- read.csv(paste0(save_dir,"/seed_",seed,"/data.csv"))
 # Get the number of columns
+#view(preds)
+#model$summary <- data.frame(models[2])
+#view(model$summary)
+#nrow(model$summary)
+```
 
+```{r}
+
+test <- get_lda_test(model=models$model,
+                    preds=models$preds,
+                    data=models$train_data,
+                    group_var = "PHQtot",
+                    control_vars = c(data_var),
+                    test_method = "textTrain_regression",
+                    seed=seed,
+                    save_dir=save_dir)
 ```
 
 
@@ -178,11 +235,37 @@ for (data_var in c("dep_all_phrases", "dep_all_words", "wor_all_words", "wor_all
 ```
 
 ```{r}
+embedding_models = c("distilroberta") # miniLM", "mpnet", "multi-mpnet", 
+for (data_var in c("dep_text")){#, "dep_all_words", "wor_all_words", "wor_all_phrases", "wor_text")){
+  for (embedding_model in embedding_models){
+    preds <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/topic_distr.csv"))
+    view(preds)
+    train_data <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/data.csv"))
+    if (grepl("dep", data_var)){
+      group_var <- "PHQtot"
+    } else {
+      group_var <- "GADtot"
+    }
+    test <- get_lda_test(model=model,
+                    preds=preds,
+                    data=train_data,
+                    group_var = group_var,
+                    control_vars = c(group_var),
+                    test_method = "linear_regression",
+                    seed=seed,
+                    save_dir=paste0("./bert_topic/results/",data_var,"/",embedding_model))
+  }
+}
+view(test) 
+```
+
+```{r}
 view(dtms$train_data)
 ```
 
 ##### 4.2 Linear Regression
 ```{r}
+preds <- 
 test <- get_lda_test(model=model,
                     preds=preds,
                     data=dtms$test_data,
@@ -190,19 +273,19 @@ test <- get_lda_test(model=model,
                     control_vars = c("PHQtot"),
                     test_method = "linear_regression",
                     seed=seed,
-                    save_dir=save_dir)
+                    save_dir=)
 view(test)
 ```
 
 ```{r}
-plot_wordclouds(model = model,
+plot_wordclouds(model = "bert_topic",
                 test = test,
                 test_type = "linear_regression",
                 cor_var = "PHQtot",
                 plot_topics_idx = NULL,
-                p_threshold = NULL,
+                p_threshold = 0.05,
                 color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
                 color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
-                save_dir=save_dir,
+                save_dir="./bert_topic/topic_csv_files",
                 seed=seed)
 ```

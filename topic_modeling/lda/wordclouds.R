@@ -1,13 +1,18 @@
 library(ggwordcloud)
+source("./topic_modeling/lda/main.R")
 
 
-assign_phi_to_words <- function(df_list, phi){
+assign_phi_to_words <- function(df_list, phi, model_type){
   for (i in 1:length(df_list)){
     df <- df_list[[i]] 
     phi_vector <- c()
     for (j in 1:nrow(df)){
       word <- df[j,]
-      phi_vector <- c(phi_vector,phi[paste0("t_",i),][word])
+      if (model_type=="mallet"){
+        phi_vector <- c(phi_vector,phi[i,][word])
+      } else {
+        phi_vector <- c(phi_vector,phi[paste0("t_",i),][word])
+      }
     }
     df$phi <- phi_vector
     df_list[[i]] <- df
@@ -62,12 +67,12 @@ create_plots <- function(df_list,
     print(p_adjusted)
     
     #if (grep(paste0(i, plo)))
-    if (is.null(p_threshold)){
+    if (is.null(p_threshold) ){
       p_threshold <- p_adjusted +1 
     }
     
     print(is.null(p_threshold))
-    if (p_adjusted < p_threshold){
+    if (!is.nan(p_adjusted) & p_adjusted < p_threshold){
       
       
       #estimate <- test[i,][[grep(estimate_col, colnames(test), value=TRUE)]]# $PHQtot.estimate
@@ -106,6 +111,7 @@ create_df_list_bert_topics <- function(save_dir, num_topics){
 
 
 plot_wordclouds <- function(model,
+                            model_type,
                             test,
                             test_type,
                             cor_var,
@@ -115,15 +121,24 @@ plot_wordclouds <- function(model,
                             p_threshold,
                             save_dir,
                             seed){
-  if (model=="bert_topic"){
+  if (model_type=="bert_topic"){
     view(test)
     num_topics <- nrow(test)
     print(num_topics)
     #print(num_t_columns)
     df_list <- create_df_list_bert_topics(save_dir, num_topics)
-  } else {
+  } else if (model_type=="mallet"){
+    model <- name_cols_with_vocab(model, "phi", model$vocabulary)
+    #view(model$phi)
+    #view(model$phi)
     df_list <- create_topic_words_dfs(model$summary)
-    df_list <- assign_phi_to_words(df_list, model$phi)
+    #view(df_list)
+    df_list <- assign_phi_to_words(df_list, model$phi, model_type)
+  } else if (model_type =="textmineR"){
+    df_list <- create_topic_words_dfs(model$summary)
+    view(df_list)
+    df_list <- assign_phi_to_words(df_list, model$phi, model_type)
+    print(df_list)
   }
   create_plots(df_list = df_list, 
                test=test, 

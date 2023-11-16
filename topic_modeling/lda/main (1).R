@@ -3,21 +3,10 @@ library(tidyverse)
 library(mallet)
 library(rJava)
 library(tokenizers)
-library(reticulate)
-source("./topic_modeling/lda/utils.R")
-source("./topic_modeling/lda/inferencer.R")
-use_condaenv("bert_topic", required = TRUE)
-source_python("./topic_modeling/bert_topic/bert_topic.py")
+source("./lda/utils.R")
 library(text2vec)
 library(dplyr)
 library(quanteda)
-
-get_absolute_frequency_term_document <- function(dtm){
-  word_counts <- colSums(dtms$train_dtm)
-  sorted_word_counts <- word_counts[order(-word_counts)]
-  sorted_word_df <- data.frame(word = names(sorted_word_counts), count = sorted_word_counts)
-  return(sorted_word_df)
-}
 
 get_relative_frequency_term_document <- function(dtm){
   # Convert binary matrix to a count matrix
@@ -42,7 +31,11 @@ name_cols_with_vocab <- function(model, col, vocabulary){
 # returns matrix in shape num(topics)*num(documents)
 # dim(topic_term_matrix) = num(topics)*num(terms)
 # dim(term_document_matrix) = num(terms)*num(documents)
-get_topic_per_document_dist <- function(topic_term_matrix, term_document_matrix, vocabulary){
+get_topic_per_document_dist <- function(
+    topic_term_matrix, 
+    term_document_matrix, 
+    vocabulary){
+  
   num_topics <- dim(topic_term_matrix)[1]
   num_documents <- dim(term_document_matrix)[1]
   num_words <- length(vocabulary)
@@ -169,7 +162,7 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   #  text_cols= text[c(id_col,data_col,cor_var, group_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
   #}
   text_cols <- text
-  text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
+  #text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
   split_index <- round(nrow(text_cols) * split) 
@@ -240,12 +233,8 @@ get_dtm <- function(data_dir, # provide relative directory path to data
       train_dtm <- train_dtm[,-removal_columns]
     }
   } else if (removal_mode == "threshold"){
-    if (!is.null(removal_rate_least)){
-      train_dtm <- train_dtm[,colSums(train_dtm) > removal_rate_least]
-    }
-    if (!is.null(removal_rate_most)){
-      train_dtm <- train_dtm[,colSums(train_dtm) < removal_rate_most]
-    }
+    train_dtm <- train_dtm[,colSums(train_dtm) > removal_rate_least]
+    train_dtm <- train_dtm[,colSums(train_dtm) < removal_rate_most]
   }
   
   #if (removal_rate_least > 0 | removal_rate_most > 0){
@@ -292,12 +281,8 @@ get_dtm <- function(data_dir, # provide relative directory path to data
       test_dtm <- test_dtm[,-removal_columns]
     }
   } else if (removal_mode == "threshold"){
-    if (!is.null(removal_rate_least)){
-      test_dtm <- test_dtm[,colSums(test_dtm) > removal_rate_least]
-    }
-    if (!is.null(removal_rate_most)){
-      test_dtm <- test_dtm[,colSums(test_dtm) < removal_rate_most]
-    }
+    test_dtm <- test_dtm[,colSums(test_dtm) > removal_rate_least]
+    test_dtm <- test_dtm[,colSums(test_dtm) < removal_rate_most]
   }
   
   
@@ -317,44 +302,6 @@ get_dtm <- function(data_dir, # provide relative directory path to data
     saveRDS(dtms, paste0(save_dir, "/seed_", seed, "/dtms.rds"))
   }
   return(dtms)
-}
-
-get_bertopic_model <- function(data,
-                               data_var,
-                               embedding_model="default",
-                               umap_model="default",
-                               hdbscan_model="default",
-                               vectorizer_model="default",
-                               representation_model="default",
-                               num_top_words=10,
-                               n_gram_range=c(1,3),
-                               stop_words="english",
-                               min_df=min_df,
-                               bm25_weighting=bm25_weighting,
-                               reduce_frequent_words=reduce_frequent_words,
-                               seed=1234,
-                               save_dir="./results"){
-  
-  model <- create_bertopic_model(data=data,
-                                 data_var=data_var,
-                                 embedding_model=embedding_model,  # provide a value for embedding_model
-                                 umap_model=umap_model,       # provide a value for umap_model
-                                 hdbscan_model=hdbscan_model,    # provide a value for hdbscan_model
-                                 vectorizer_model=vectorizer_model,  # provide a value for vectorizer_model
-                                 representation_model=representation_model,  # provide a value for representation_model
-                                 top_n_words=num_top_words,  # provide a value for top_n_words
-                                 n_gram_range=n_gram_range,
-                                 min_df=min_df,
-                                 bm25_weighting=bm25_weighting,
-                                 reduce_frequent_words=reduce_frequent_words,
-                                 stop_words = stop_words,  # provide a value for n_gram_range
-                                 seed=seed,
-                                 save_dir=save_dir  # provide a value for save_dir
-                                 )
-  model$summary <- data.frame(model[2])
-  preds <- read.csv(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
-  train_data <- read.csv(paste0(save_dir,"/seed_",seed,"/data.csv"))
-  return(list(model=model, preds=preds, train_data=train_data))
 }
 
 get_lda_model <- function(model_type,
@@ -414,9 +361,10 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
                           num_iterations, # only needed if load_dir==NULL, 
                           dtm, # only needed if load_dir==NULL
                           data,
+                          mallet_instance = NULL, 
                           group_var, # only needed if load_dir==NULL
                           seed,
-                          mode="mallet",
+                          mode="custom",
                           save_dir=NULL,
                           load_dir=NULL){
   set.seed(seed)
@@ -441,16 +389,19 @@ get_lda_preds <- function(model, # only needed if load_dir==NULL
                                            vocabulary = model$vocabulary)
     } else if (mode == "mallet"){
       
-      inf_model <- model$inferencer
-      #print(inf_model)
+      inf_model <- model$getInferencer()
+      
       preds <- infer_topics(
         inferencer = inf_model,
-        instances = model$instances,
+        instances = mallet_instance,
         n_iterations= 200,
         sampling_interval = 10, # aka "thinning"
         burn_in = 10,
         random_seed = seed
       )
+      
+      
+      
     }
     
     #preds <- model$topic_docs
@@ -535,7 +486,6 @@ get_lda_test <- function(model,
       write_csv(data.frame(df), paste0(save_dir, "/seed_", seed, "/textTrain_regression.csv"))
     }
     saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test_",test_method, ".rds"))
-    print(paste0("The test was saved in: ", save_dir,"/seed_", seed, "/test_",test_method, ".rds"))
   }
   return(test)
 }
@@ -578,18 +528,25 @@ get_mallet_model <- function(dtm,
   
   
   return_model <- list()
+  return_model$model <- model
+  return_model$instances <- instances
   #return_model$top_terms_mallet <- bind_rows(list_top_terms)
-  return_model$instances <- instances #model$instances()
-  return_model$inferencer <- model$getInferencer()
-  #view(return_model$instances)
   return_model$top_terms_mallet <- df_top_terms
   return_model$top_terms <- return_model$top_terms_mallet
   #return_model$phi <- mallet.topic.w
   return_model$phi <- mallet.topic.words(model, smoothed=TRUE, normalized=TRUE)
+  
+  
   return_model$topic_docs <- mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)
   #return_model$top_terms <- GetTopTerms(phi = return_model$phi, M = num_top_words)
   return_model$frequencies <- mallet.word.freqs(model)
   return_model$vocabulary <- model$getVocabulary()
+  
+  # OK Add, so that the word cloud will work
+  colnames(return_model$phi) <- return_model$vocabulary
+  rownames(return_model$phi) <- paste("t_", 1:nrow(return_model$phi), sep="")
+  
+  
   model$prevalence_mallet <- colSums(mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)) /
     sum(mallet.doc.topics(model, smoothed=TRUE, normalized=TRUE)) * 100
   #sum(list_top_terms$prevalence)
@@ -643,8 +600,8 @@ get_textmineR_model <- function(dtm,
                        k = num_topics,
                        iterations = num_iterations, # I usually recommend at least 500 iterations or more
                        burnin = 180,
-                       alpha = 0.1,
-                       beta = 0.05,
+                       alpha = 5,
+                       beta = 0.01,
                        optimize_alpha = TRUE,
                        calc_likelihood = TRUE,
                        calc_coherence = TRUE,
@@ -657,3 +614,128 @@ get_textmineR_model <- function(dtm,
   return(model)
 
 } 
+
+
+
+get_topic_test <- function(model_type,
+                           num_topics,
+                           num_top_words,
+                           data_dir,
+                           id_column,
+                           data_column,
+                           diagnose_column,
+                           save=FALSE,
+                           load=FALSE,
+                           seed=1){
+  
+  set.seed(seed)
+  save_dir <- paste0("./", data_column, "_", diagnose_column, "_", model_type, "_", num_topics)
+  load_dir <- save_dir
+  text <- read.csv(paste0("./data/", data_dir))
+  #text <- read.csv('response_format_cleaned_ds1.csv') # load text
+  text_columns = text[c(id_column,data_column,diagnose_column)] # select columns
+  text_columns <- text_columns[complete.cases(text_columns), ] # remove rows without values
+  
+  # create a document term matrix
+  dtm <- CreateDtm(doc_vec = text_columns[[data_column]], # character vector of documents
+                   doc_names = text_columns$participant_id, # document names
+                   ngram_window = c(1, 3), # minimum and maximum n-gram length
+                   stopword_vec = stopwords::stopwords("en", source = "snowball"),
+                   lower = TRUE, # lowercase - this is the default value
+                   remove_punctuation = TRUE, # punctuation - this is the default
+                   remove_numbers = TRUE, # numbers - this is the default
+                   verbose = FALSE, # Turn off status bar for this demo
+                   cpus = 4) # default is all available cpus on the system
+  dtm <- dtm[,colSums(dtm) > 2] # remove words with occurences < 2
+  #view(dtm)
+  if (load){
+    if (model_type == "textmineR"){
+      model <- readRDS(paste0(load_dir, "/seed_", seed, "/model.rds"))
+      preds <- readRDS(paste0(load_dir, "/seed_", seed, "/preds.rds"))
+    } else {
+      model <- readRDS(paste0(load_dir, "/seed_", seed, "/model.rds"))
+      pred_model <- readRDS(paste0(load_dir, "/seed_", seed, "/pred_model.rds"))
+      preds <- readRDS(paste0(load_dir, "/seed_", seed, "/preds.rds"))
+    }
+  } else{
+    if (model_type == "textmineR"){
+      model <- get_textmineR_model(dtm = dtm,
+                                   num_topics = num_topics,
+                                   num_top_words = num_top_words)
+    } else {
+      models <- get_mallet_model(dtm = dtm,
+                                num_topics = num_topics,
+                                num_top_words = num_top_words)
+      model <- models$return_model
+      pred_model <- models$pred_model
+    }
+    model$summary <- data.frame(topic = rownames(model$labels),
+                                label = model$labels,
+                                coherence = round(model$coherence, 3),
+                                prevalence = round(model$prevalence,3),
+                                top_terms = apply(model$top_terms, 
+                                                  2, 
+                                                  function(x){paste(x, collapse = ", ")}),
+                                stringsAsFactors = FALSE)
+    
+    model$summary[order(model$summary$prevalence, decreasing = TRUE) , ][ 1:10 , ]
+    if (model_type == "textmineR"){
+      preds <- predict(model,
+                       dtm,
+                       method = "gibbs",
+                       iterations = 200,
+                       burnin = 180,
+                       cpus = 4)
+      preds <- as_tibble(preds)
+      colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
+      categories <- text_columns[c(diagnose_column)]
+      preds <- bind_cols(categories, preds)
+    } else {
+      preds <- predict(pred_model,
+                       dtm,
+                       method = "gibbs",
+                       iterations = 200,
+                       burnin = 180,
+                       cpus = 4)
+      preds <- as_tibble(preds)
+      colnames(preds) <- paste("t_", 1:ncol(preds), sep="")
+      categories <- text_columns[c(diagnose_column)]
+      preds <- bind_cols(categories, preds)
+      #preds <- model$theta
+      #categories <- text_columns[c(diagnose_column)]
+      #preds <- bind_cols(categories, preds)
+    }
+    
+  }
+  preds <- preds %>% tibble()
+  test <- topic_test(topic_terms = model$summary,
+                     topics_loadings = preds,
+                     grouping_variable = preds[diagnose_column],
+                     test_method = "t-test",
+                     split = "median",
+                     n_min_max = 20,
+                     multiple_comparison = "fdr")
+  
+  if (save){
+    if (!dir.exists(save_dir)) {
+      # Create the directory
+      dir.create(save_dir)
+      cat("Directory created successfully.\n")
+    } else {
+      cat("Directory already exists.\n")
+    }
+    if(!dir.exists(paste0(save_dir, "/seed_", seed))){
+      dir.create(paste0(save_dir, "/seed_", seed))
+    }
+    saveRDS(model, paste0(save_dir, "/seed_", seed, "/model.rds"))
+    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/preds.rds"))
+    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test.rds"))
+    if (model_type == "mallet"){
+      saveRDS(pred_model, paste0(save_dir, "/seed_", seed, "/pred_model.rds"))
+    }
+  }
+  
+  
+  
+  return(test)
+}

@@ -22,12 +22,8 @@ Folder [results](./results) stores the results of your experiment
 
 **Data** 
 ```{r}
-data <- read_csv("./data/suicide_test.csv")
-data$id <- row.names(data)
-write_csv(data, "./data/suicide_test.csv")
-data_dir <- "./data/suicide_test.csv"
-data_col <- "suicide"
-id_col <- "id"
+data <- read_csv("./data/depression_anxiety_cleaned.csv")
+data_col <- "dep_text"
 group_var <- NULL # now necessary, but only used for t-test
 cor_var <- "PHQtot"
 ```
@@ -36,7 +32,7 @@ cor_var <- "PHQtot"
 **BERTopic**
 ```{r}
 model_type <- "bert_topic" # or "mallet"
-data_col <- "suicide"
+data_col <- "dep_text"
 embedding_model <- "distilroberta"
 umap_model <- "default"
 hdbscan_model <- "default"
@@ -45,13 +41,16 @@ representation_model <- "default"
 num_top_words <- 10
 stop_words = "english"
 n_gram_window <- c(1,3)
+min_df <- 5
+reduce_frequent_words <- TRUE
+bm25_weighting <- TRUE
 seed=1234
 ```
 
 **Analysis**
 ```{r}
-cor_var <- "IDASSuicidality" # grouping variable for t-test, to be predicted variable for other
-control_vars <- c("IDASSuicidality")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
+cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
+control_vars <- c("PHQtot")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
 ```
 
@@ -70,7 +69,9 @@ All objects created within the pipeline are created in the directory below. Thes
 save_dir <- paste0("./results/",
             model_type,"_",
             data_col, "_",
-            "embed_", embedding_model)#,)
+            "embed_", embedding_model,
+            "_min_df_", min_df,
+            "_bm25_weighting_", bm25_weighting)#,)
 if (!dir.exists("./results")) {
   dir.create("./results")
 }
@@ -95,9 +96,9 @@ source("./topic_modeling/lda/wordclouds.R")
 
 #### 1 Create bert topic model
 ```{r}
-data <- data.frame(read_csv("./data/suicide_test.csv"))
+#data <- data.frame(read_csv("./data/suicide_test.csv"))
 bertopic <- get_bertopic_model(data=data,
-                        data_var="suicide",
+                        data_var="dep_text",
                         embedding_model=embedding_model,
                         umap_model=umap_model,
                         hdbscan_model=hdbscan_model,
@@ -105,6 +106,9 @@ bertopic <- get_bertopic_model(data=data,
                         representation_model=representation_model,
                         num_top_words=num_top_words,
                         n_gram_range=n_gram_window,
+                        min_df=min_df,
+                        bm25_weighting=bm25_weighting,
+                        reduce_frequent_words=reduce_frequent_words,
                         stop_words=stop_words,
                         save_dir=save_dir)
 ```
@@ -117,8 +121,8 @@ bertopic <- get_bertopic_model(data=data,
 test <- get_lda_test(model=bertopic$model,
                     preds=bertopic$preds,
                     data=bertopic$train_data,
-                    group_var = "IDASSuicidality",
-                    control_vars = c("IDASSuicidality"),
+                    group_var = "PHQtot",
+                    control_vars = c("PHQtot"),
                     test_method = "textTrain_regression",
                     seed=seed,
                     save_dir=save_dir)
@@ -129,8 +133,8 @@ test <- get_lda_test(model=bertopic$model,
 test <- get_lda_test(model=bertopic$model,
                     preds=bertopic$preds,
                     data= bertopic$train_data,
-                    group_var = "IDASSuicidality",
-                    control_vars = c("IDASSuicidality"),
+                    group_var = "PHQtot",
+                    control_vars = c("PHQtot"),
                     test_method = "linear_regression",
                     seed=seed,
                     save_dir=save_dir)
@@ -143,7 +147,7 @@ plot_wordclouds(model = model,
                 model_type = "bert_topic",
                 test = test,
                 test_type = "linear_regression",
-                cor_var = "IDASSuicidality",
+                cor_var = "PHQtot",
                 plot_topics_idx = NULL,
                 p_threshold = 0.05,
                 color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),

@@ -22,9 +22,12 @@ Folder [results](./results) stores the results of your experiment
 
 **Data** 
 ```{r}
-data_dir <- "./data/depression_anxiety_cleaned.csv"
-data_col <- "dep_all_phrases"
-id_col <- "unique_id"
+data <- read_csv("./data/suicide_test.csv")
+data$id <- row.names(data)
+write_csv(data, "./data/suicide_test.csv")
+data_dir <- "./data/suicide_test.csv"
+data_col <- "suicide"
+id_col <- "id"
 group_var <- NULL # now necessary, but only used for t-test
 cor_var <- "PHQtot"
 ```
@@ -44,18 +47,18 @@ split <- 1
 
 **LDA** 
 ```{r}
-model_type <- "bertopic" # or "mallet"
+model_type <- "mallet" # or "mallet"
 num_topics <- 20
 num_top_words <- 10
 num_train_iterations <- 2000
 num_pred_iterations <- 200
-pred_mode <- "function" # or "custom" for mallet
+pred_mode <- "mallet" # or "custom" for mallet
 ```
 
 **BERTopic**
 ```{r}
 model_type <- "bertopic" # or "mallet"
-data_col <- "dep_text"
+data_col <- "suicide"
 embedding_model <- "distilroberta"
 umap_model <- "default"
 hdbscan_model <- "default"
@@ -69,8 +72,8 @@ seed=1234
 
 **Analysis**
 ```{r}
-cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
-control_vars <- c("PHQtot")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
+cor_var <- "IDASSuicidality" # grouping variable for t-test, to be predicted variable for other
+control_vars <- c("IDASSuicidality")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
 ```
 
@@ -89,12 +92,12 @@ All objects created within the pipeline are created in the directory below. Thes
 save_dir <- paste0("./results/",
             model_type,"_",
             data_col, "_",
-            "embed_", embedding_model)#,
-            #num_topics, 
-            #"_most_",removal_num_most, 
-            #"_least_", removal_num_least, 
-            #"_occ_", occ_rate, 
-            #"_pred_", pred_mode)
+            #"embed_", embedding_model)#,
+            num_topics, 
+            "_most_",removal_num_most, 
+            "_least_", removal_num_least, 
+            "_occ_", occ_rate, 
+            "_pred_", pred_mode)
 if (!dir.exists("./results")) {
   dir.create("./results")
 }
@@ -148,31 +151,9 @@ model <- get_lda_model(model_type=model_type,
                         save_dir=save_dir)
 ```
 
-
-
-#### 2.2 Create bert topic model
-```{r}
-data <- data.frame(read_csv("./data/depression_anxiety_cleaned.csv"))
-models <- get_bertopic_model(data=data,
-                        data_var=data_col,
-                        embedding_model=embedding_model,
-                        umap_model=umap_model,
-                        hdbscan_model=hdbscan_model,
-                        vectorizer_model=vectorizer_model,
-                        representation_model=representation_model,
-                        num_top_words=num_top_words,
-                        n_gram_range=n_gram_window,
-                        stop_words=stop_words,
-                        save_dir=save_dir)
-```
-
-```{r}
-models[2]
-```
-
 #### 3. Create Predictions
 ```{r}
-preds <- get_lda_preds(model = models$model,
+preds <- get_lda_preds(model = model,
                         num_iterations=num_pred_iterations,
                         data = dtms$train_data,
                         dtm = dtms$train_dtm,
@@ -198,11 +179,24 @@ print(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
 
 ```{r}
 
-test <- get_lda_test(model=models$model,
-                    preds=models$preds,
-                    data=models$train_data,
-                    group_var = "PHQtot",
-                    control_vars = c(data_var),
+test <- get_lda_test(model=model,
+                    preds=preds,
+                    data=dtms$train_data,
+                    group_var = cor_var,
+                    control_vars = c(cor_var),
+                    test_method = "textTrain_regression",
+                    seed=seed,
+                    save_dir=save_dir)
+```
+
+
+```{r}
+
+test <- get_lda_test(model=bertopic$model,
+                    preds=bertopic$preds,
+                    data=bertopic$train_data,
+                    group_var = "IDASSuicidality",
+                    control_vars = c("IDASSuicidality"),
                     test_method = "textTrain_regression",
                     seed=seed,
                     save_dir=save_dir)
@@ -264,28 +258,48 @@ view(dtms$train_data)
 ```
 
 ##### 4.2 Linear Regression
+
 ```{r}
-preds <- 
 test <- get_lda_test(model=model,
                     preds=preds,
-                    data=dtms$test_data,
-                    group_var = "PHQtot",
-                    control_vars = c("PHQtot"),
+                    data=dtms$train_data,
+                    group_var = cor_var,
+                    control_vars = control_vars,
                     test_method = "linear_regression",
                     seed=seed,
-                    save_dir=)
+                    save_dir=save_dir)
 view(test)
 ```
 
 ```{r}
-plot_wordclouds(model = "bert_topic",
+test <- get_lda_test(model=bertopic$model,
+                    preds=bertopic$preds,
+                    data= bertopic$train_data,
+                    group_var = "IDASSuicidality",
+                    control_vars = c("IDASSuicidality"),
+                    test_method = "linear_regression",
+                    seed=seed,
+                    save_dir=save_dir)
+view(test)
+```
+```{r}
+textmineR_phi <- model$phi
+view(textmineR_phi)
+textmineR_summary <- model$summary
+view(textmineR_summary)
+```
+
+```{r}
+
+plot_wordclouds(model = model,
+                model_type = "mallet",
                 test = test,
                 test_type = "linear_regression",
-                cor_var = "PHQtot",
+                cor_var = "IDASSuicidality",
                 plot_topics_idx = NULL,
                 p_threshold = 0.05,
                 color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
                 color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
-                save_dir="./bert_topic/topic_csv_files",
+                save_dir=save_dir,
                 seed=seed)
 ```

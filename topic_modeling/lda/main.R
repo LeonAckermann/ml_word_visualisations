@@ -357,7 +357,7 @@ get_bertopic_model <- function(data,
   return(list(model=model, preds=preds, train_data=train_data))
 }
 
-get_lda_model <- function(model_type,
+get_lda_model <- function(model_type="mallet",
                           dtm,
                           num_topics,
                           num_top_words,
@@ -505,7 +505,7 @@ get_lda_test <- function(model,
       }
     }
     preds <- preds %>% tibble()
-    view(preds)
+    #view(preds)
     test <- topic_test(topic_terms = model$summary,
                        topics_loadings = preds,
                        grouping_variable = preds[group_var],

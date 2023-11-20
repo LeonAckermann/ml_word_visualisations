@@ -20,16 +20,21 @@ Folder [results](./results) stores the results of your experiment
 #### 0. Preparation
   #### 0.1 Set (hyper)parameters
 
-**Data** 
 ```{r}
 data <- read_csv("./data/suicide_test.csv")
-data$id <- row.names(data)
-write_csv(data, "./data/suicide_test.csv")
+view(data)
+data2 <- na.omit(data)
+view(data2)
+write_csv(data2,"./data/depression_anxiety_final.csv")
+```
+
+**Data** 
+```{r}
 data_dir <- "./data/suicide_test.csv"
 data_col <- "suicide"
 id_col <- "id"
 group_var <- NULL # now necessary, but only used for t-test
-cor_var <- "PHQtot"
+cor_var <- "IDASSuicidality"
 ```
 
 **Document Term Matrix** 
@@ -38,7 +43,7 @@ ngram_window <- c(1,3)
 stopwords <- stopwords::stopwords("en", source = "snowball")
 removalword <- "" # just possible with one word
 occ_rate <- 0
-removal_num_most <- NULL
+removal_num_most <- 200
 removal_num_least <- 4
 removal_mode <- "threshold" # "relative"
 split <- 1
@@ -55,25 +60,11 @@ num_pred_iterations <- 200
 pred_mode <- "mallet" # or "custom" for mallet
 ```
 
-**BERTopic**
-```{r}
-model_type <- "bertopic" # or "mallet"
-data_col <- "suicide"
-embedding_model <- "distilroberta"
-umap_model <- "default"
-hdbscan_model <- "default"
-vectorizer_model <- "default"
-representation_model <- "default"
-num_top_words <- 10
-stop_words = "english"
-n_gram_window <- c(1,3)
-seed=1234
-```
 
 **Analysis**
 ```{r}
-cor_var <- "IDASSuicidality" # grouping variable for t-test, to be predicted variable for other
-control_vars <- c("IDASSuicidality")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
+cor_var <- "PHQtot" # grouping variable for t-test, to be predicted variable for other
+control_vars <- c("PHQtot")#, "GADtot") # vector of variables to control analysis with if test_method is linear_regression
 test_method <- "textTrain_regression" # linear_regression, logistic_regression, t-test
 ```
 
@@ -137,9 +128,6 @@ dtms <- get_dtm(data_dir = data_dir,
                 seed=seed,
                 save_dir=save_dir)
 ```
-
-
-
 #### 2. Create LDA Model
 ```{r}
 model <- get_lda_model(model_type=model_type,
@@ -161,21 +149,10 @@ preds <- get_lda_preds(model = model,
                         seed=seed,
                         mode=pred_mode,
                         save_dir = save_dir)
-view(preds)
 ```
 
 #### 4. Analysis
 ##### 4.1 textTrain_regression
-```{r}
-print(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
-#preds <- read.csv(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
-#train_data <- read.csv(paste0(save_dir,"/seed_",seed,"/data.csv"))
-# Get the number of columns
-#view(preds)
-#model$summary <- data.frame(models[2])
-#view(model$summary)
-#nrow(model$summary)
-```
 
 ```{r}
 
@@ -190,72 +167,6 @@ test <- get_lda_test(model=model,
 ```
 
 
-```{r}
-
-test <- get_lda_test(model=bertopic$model,
-                    preds=bertopic$preds,
-                    data=bertopic$train_data,
-                    group_var = "IDASSuicidality",
-                    control_vars = c("IDASSuicidality"),
-                    test_method = "textTrain_regression",
-                    seed=seed,
-                    save_dir=save_dir)
-```
-
-
-```{r}
-embedding_models = c("miniLM", "mpnet", "multi-mpnet", "distilroberta")
-for (data_var in c("dep_all_phrases", "dep_all_words", "wor_all_words", "wor_all_phrases", "wor_text")){
-  for (embedding_model in embedding_models){
-    preds <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/topic_distr.csv"))
-    train_data <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/data.csv"))
-    if (grepl("dep", data_var)){
-      group_var <- "PHQtot"
-    } else {
-      group_var <- "GADtot"
-    }
-    test <- get_lda_test(model=model,
-                    preds=preds,
-                    data=train_data,
-                    group_var = group_var,
-                    control_vars = c(data_var),
-                    test_method = "textTrain_regression",
-                    seed=seed,
-                    save_dir=paste0("./bert_topic/results/",data_var,"/",embedding_model))
-  }
-}
-  
-
-```
-
-```{r}
-embedding_models = c("distilroberta") # miniLM", "mpnet", "multi-mpnet", 
-for (data_var in c("dep_text")){#, "dep_all_words", "wor_all_words", "wor_all_phrases", "wor_text")){
-  for (embedding_model in embedding_models){
-    preds <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/topic_distr.csv"))
-    view(preds)
-    train_data <- read.csv(paste0("./bert_topic/results/",data_var, "/", embedding_model,"/data.csv"))
-    if (grepl("dep", data_var)){
-      group_var <- "PHQtot"
-    } else {
-      group_var <- "GADtot"
-    }
-    test <- get_lda_test(model=model,
-                    preds=preds,
-                    data=train_data,
-                    group_var = group_var,
-                    control_vars = c(group_var),
-                    test_method = "linear_regression",
-                    seed=seed,
-                    save_dir=paste0("./bert_topic/results/",data_var,"/",embedding_model))
-  }
-}
-view(test) 
-```
-
-```{r}
-view(dtms$train_data)
-```
 
 ##### 4.2 Linear Regression
 
@@ -263,18 +174,6 @@ view(dtms$train_data)
 test <- get_lda_test(model=model,
                     preds=preds,
                     data=dtms$train_data,
-                    group_var = cor_var,
-                    control_vars = control_vars,
-                    test_method = "linear_regression",
-                    seed=seed,
-                    save_dir=save_dir)
-view(test)
-```
-
-```{r}
-test <- get_lda_test(model=bertopic$model,
-                    preds=bertopic$preds,
-                    data= bertopic$train_data,
                     group_var = "IDASSuicidality",
                     control_vars = c("IDASSuicidality"),
                     test_method = "linear_regression",
@@ -282,11 +181,11 @@ test <- get_lda_test(model=bertopic$model,
                     save_dir=save_dir)
 view(test)
 ```
+
 ```{r}
-textmineR_phi <- model$phi
-view(textmineR_phi)
-textmineR_summary <- model$summary
-view(textmineR_summary)
+summary <- model[["summary"]]
+print(summary)
+
 ```
 
 ```{r}
@@ -300,6 +199,16 @@ plot_wordclouds(model = model,
                 p_threshold = 0.05,
                 color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
                 color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
+                scale_size=TRUE,
                 save_dir=save_dir,
                 seed=seed)
+```
+
+
+
+```{r}
+lda_vis <- create_lda_vis(model=model,
+                          data=dtms$train_data,
+                          data_col="suicide",
+                          save_dir=save_dir)
 ```

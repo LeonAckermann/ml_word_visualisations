@@ -184,13 +184,7 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   #} else {
   #  text_cols= text[c(id_col,data_col,cor_var, group_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
   #}
-  text_cols <- text
-  for (index1 in c(id_col, data_col, group_var, cor_var)){
-    if (!is.na(index1)){
-      text_cols[[index1]] <- text_cols[[index1]][complete.cases(text_cols[[index1]]), ]
-    }
-  }
-  #text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
+  text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
   split_index <- round(nrow(text_cols) * split) 

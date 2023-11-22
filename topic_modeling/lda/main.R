@@ -7,6 +7,14 @@ library(reticulate)
 source("./topic_modeling/lda/utils.R")
 source("./topic_modeling/lda/inferencer.R")
 use_condaenv("bert_topic", required = TRUE)
+# use_condaenv("textrpp_condaenv", required = TRUE) # This is the conda env of the R-Text package.
+packages <- c("bertopic", "flair")
+for (package in packages) {
+  if (!py_module_available(package)) {
+    # Install the package if it's not available
+    py_install(package,envname="textrpp_condaenv", pip=TRUE)
+  }
+}
 source_python("./topic_modeling/bert_topic/bert_topic.py")
 library(text2vec)
 library(dplyr)
@@ -360,6 +368,8 @@ get_bertopic_model <- function(data,
 get_lda_model <- function(model_type="mallet",
                           dtm,
                           num_topics,
+                          alpha.sum = 5,
+                          beta = 0.01,
                           num_top_words,
                           num_iterations,
                           seed,

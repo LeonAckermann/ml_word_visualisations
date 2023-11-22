@@ -1,3 +1,11 @@
+if (!require(LDAvis)) {
+  install.packages("LDAvis")
+}
+if (!require(servr)) {
+  install.packages("servr")
+}
+
+
 library(textmineR)
 library(tidyverse)
 library(mallet)

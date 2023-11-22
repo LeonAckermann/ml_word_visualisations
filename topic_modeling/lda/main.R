@@ -377,8 +377,11 @@ get_lda_model <- function(model_type="mallet",
     } else if (model_type == "mallet"){
       model <- get_mallet_model(dtm = dtm,
                                 num_topics = num_topics,
+                                alpha.sum = alpha.sum,
+                                beta = beta,
                                 num_top_words = num_top_words,
-                                num_iterations = num_iterations)
+                                num_iterations = num_iterations,
+                                seed = seed)
     }
     
     model$summary <- data.frame(topic = rownames(model$labels),
@@ -542,14 +545,18 @@ get_lda_test <- function(model,
 
 get_mallet_model <- function(dtm,
                              num_topics,
+                             alpha.sum = 5,
+                             beta = 0.01,
                              num_top_words, 
-                             num_iterations){
+                             num_iterations,
+                             seed = 42){
   # still to complete
   docs <- Dtm2Docs(dtm)
   
   model <- MalletLDA(num.topics = num_topics,
-                            alpha.sum = 5,
-                            beta = 0.01)
+                            alpha.sum = alpha.sum,
+                            beta = beta)
+  model$setRandomSeed(as.integer(seed))
   instances <- mallet.import(as.character(seq_along(docs)),
                              docs,
                              #"example_stoplist.csv",

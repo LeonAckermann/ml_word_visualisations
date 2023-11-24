@@ -9,6 +9,7 @@ from flair.embeddings import TransformerDocumentEmbeddings
 from umap import UMAP
 from hdbscan import HDBSCAN
 from sklearn.feature_extraction.text import CountVectorizer
+from bertopic.vectorizers import ClassTfidfTransformer
 from bertopic.representation import KeyBERTInspired, MaximalMarginalRelevance, PartOfSpeech
 import os
 #from sentence_transformers import SentenceTransformer
@@ -26,8 +27,8 @@ def get_umap_models(umap_model, seed):
     return umap_models[umap_model]
 hdbscan_models = {"default": HDBSCAN(min_cluster_size=5, metric='euclidean', cluster_selection_method='eom', prediction_data=True)}
 
-def get_vectorizer_models(vectorizer_model, n_gram_range, stop_words):
-    vectorizer_models = {"default": CountVectorizer(stop_words=stop_words, min_df=2, ngram_range=(1,3))}
+def get_vectorizer_models(vectorizer_model, n_gram_range, stop_words, min_df):
+    vectorizer_models = {"default": CountVectorizer(stop_words=stop_words, min_df=min_df, ngram_range=(1,3))}
     return vectorizer_models[vectorizer_model]
 
 representation_models = {"default": KeyBERTInspired(),
@@ -42,7 +43,10 @@ def create_bertopic_model(data,
                        representation_model="default",
                        top_n_words=10,
                        n_gram_range=(1,3),
+                       min_df=10,
                        stop_words="english",
+                       bm25_weighting=False, # bool
+                       reduce_frequent_words=True, # bool
                        seed=1234,
                        save_dir="./results"):
 
@@ -52,6 +56,7 @@ def create_bertopic_model(data,
     print(data)
     print(type(top_n_words))
     top_n_words = int(top_n_words)
+    min_df = int(min_df)
     seed = int(seed)
     data[data_var] = data[data_var].apply(lambda x: ''.join([c for c in str(x) if not c.isdigit()]))
     # dropping the rows having NaN values
@@ -72,7 +77,8 @@ def create_bertopic_model(data,
         embedding_model=embedding_models[embedding_model],
         umap_model=get_umap_models(umap_model=umap_model, seed=seed),
         hdbscan_model=hdbscan_models[umap_model],
-        vectorizer_model=get_vectorizer_models(umap_model, n_gram_range, stop_words),
+        vectorizer_model=get_vectorizer_models(umap_model, n_gram_range, stop_words, min_df),
+        ctfidf_model = ClassTfidfTransformer(bm25_weighting=bm25_weighting, reduce_frequent_words=reduce_frequent_words),
         representation_model=representation_models[representation_model],
 
         # Hyperparameters

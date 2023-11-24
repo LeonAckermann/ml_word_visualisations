@@ -14,8 +14,8 @@ library(tokenizers)
 library(reticulate)
 source("./topic_modeling/lda/utils.R")
 source("./topic_modeling/lda/inferencer.R")
-use_condaenv("bert_topic", required = TRUE)
-# use_condaenv("textrpp_condaenv", required = TRUE) # This is the conda env of the R-Text package.
+#use_condaenv("bert_topic", required = TRUE)
+use_condaenv("textrpp_condaenv", required = TRUE) # This is the conda env of the R-Text package.
 packages <- c("bertopic", "flair")
 for (package in packages) {
   if (!py_module_available(package)) {

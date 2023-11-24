@@ -24,6 +24,7 @@ for (package in packages) {
   }
 }
 source_python("./topic_modeling/bert_topic/bert_topic.py")
+source_python("./topic_modeling/Neural_Topic_models/ETM_R_integration.py")
 library(text2vec)
 library(dplyr)
 library(quanteda)
@@ -372,6 +373,38 @@ get_bertopic_model <- function(data,
   preds <- read.csv(paste0(save_dir,"/seed_",seed,"/topic_distr.csv"))
   train_data <- read.csv(paste0(save_dir,"/seed_",seed,"/data.csv"))
   return(list(model=model, preds=preds, train_data=train_data))
+}
+
+get_neuralTopic_model <- function(taskname,
+                                  no_below=5,
+                                  no_above=0.005,
+                                  num_epochs=100,
+                                  n_topic=20,
+                                  bkpt_continue=FALSE,
+                                  use_tfidf=FALSE,
+                                  rebuild=FALSE,
+                                  batch_size=512,
+                                  criterion='cross_entropy',
+                                  emb_dim=300,
+                                  auto_adj=FALSE,
+                                  ckpt=None,
+                                  lang="en"){
+  create_ETM_model(taskname,
+                   no_below,
+                   no_above,
+                   num_epochs,
+                   n_topic,
+                   bkpt_continue,
+                   use_tfidf,
+                   rebuild,
+                   batch_size,
+                   criterion,
+                   emb_dim,
+                   auto_adj,
+                   ckpt,
+                   lang)
+  preds <- read_csv("./topic_modeling/Neural_Topic_Models/doc_topic_df.csv")
+  return(preds)
 }
 
 get_lda_model <- function(model_type="mallet",

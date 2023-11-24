@@ -67,7 +67,9 @@ create_plots <- function(df_list,
     }
     estimate <- test[i,][[estimate_col]]# $PHQtot.estimate
     p_adjusted <- test[i,][[p_adjusted_col]] # $PHQtot.p_adjustedfdr
-    prevalence <- summary[paste0("t_",i),]$prevalence
+    if (scale_size==TRUE){
+      prevalence <- summary[paste0("t_",i),]$prevalence
+    }
     #print(paste0("prevalence: ", prevalence))
     
     
@@ -88,9 +90,11 @@ create_plots <- function(df_list,
         color_scheme <- color_positive_cor # scale_color_gradient(low = "darkred", high = "red")
       }
       if (scale_size == TRUE){
-        max_size = 10*log(prevalence)
+        max_size <- 10*log(prevalence)
+        y <- paste0("P = ", prevalence)
       } else {
-        max_size = 10
+        max_size <- 10
+        y <- ""
       }
       plot <- ggplot(df_list[[i]], aes(label = Word, size = phi, color = phi))+#,x=estimate)) +
         geom_text_wordcloud() +
@@ -99,7 +103,7 @@ create_plots <- function(df_list,
         #theme(plot.margin = margin(0,0,0,0, "cm")) +
         color_scheme + 
         labs(x = paste0("r = ", estimate),
-             y= paste0("P = ", prevalence))
+             y= y)
         
       if (!dir.exists(save_dir)) {
           # Create the directory
@@ -162,7 +166,7 @@ plot_wordclouds <- function(model,
                cor_var=cor_var,
                color_negative_cor = color_negative_cor,
                color_positive_cor = color_positive_cor,
-               scale_size=TRUE,
+               scale_size=scale_size,
                plot_topics_idx=plot_topics_idx,
                p_threshold=p_threshold,
                save_dir=save_dir)

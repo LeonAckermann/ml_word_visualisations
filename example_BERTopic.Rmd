@@ -22,7 +22,7 @@ Folder [results](./results) stores the results of your experiment
 
 **Data** 
 ```{r}
-data <- read_csv("./data/depression_anxiety_cleaned.csv")
+data <- read_csv("./data/depression_anxiety_final_2.csv")
 data_col <- "dep_text"
 group_var <- NULL # now necessary, but only used for t-test
 cor_var <- "PHQtot"
@@ -113,6 +113,11 @@ bertopic <- get_bertopic_model(data=data,
                         save_dir=save_dir)
 ```
 
+```{r}
+data2 <- read_csv("./data/depression_anxiety_final_2.csv")
+view(data2)
+```
+
 
 #### 2. Analysis
 
@@ -150,6 +155,7 @@ plot_wordclouds(model = model,
                 cor_var = "PHQtot",
                 plot_topics_idx = NULL,
                 p_threshold = 0.05,
+                scale_size=FALSE,
                 color_negative_cor = scale_color_gradient(low = "darkgreen", high = "green"),
                 color_positive_cor = scale_color_gradient(low = "darkred", high = "red"),
                 save_dir=save_dir,

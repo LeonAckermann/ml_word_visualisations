@@ -166,7 +166,7 @@ plot_wordclouds <- function(model,
                cor_var=cor_var,
                color_negative_cor = color_negative_cor,
                color_positive_cor = color_positive_cor,
-               scale_size=TRUE,
+               scale_size=scale_size,
                plot_topics_idx=plot_topics_idx,
                p_threshold=p_threshold,
                save_dir=save_dir)

@@ -89,7 +89,7 @@ corr_topic_wise <- function(topics_loadings,
 topics_corr_grouping <- function(topics_loadings,
                                  grouping1,
                                  colnames1,
-                                 method1="bonferroni") {
+                                 method1="fdr") {
   topics_stats <- purrr::pmap(list(
     list(topics_loadings),
     grouping1,

@@ -19,7 +19,7 @@ import os
 
 embedding_models = {"miniLM":SentenceTransformer("all-MiniLM-L6-v2"),
                     #"roberta": TransformerDocumentEmbeddings('roberta-base'),
-                    "roberta-large": TransformerDocumentEmbeddings('roberta-large'),
+                    #"roberta-large": TransformerDocumentEmbeddings('roberta-large'),
                     "multilingual-e5-large": SentenceTransformer("intfloat/multilingual-e5-large"),
                     "mpnet": SentenceTransformer("all-mpnet-base-v2"),
                     "multi-mpnet": SentenceTransformer("multi-qa-mpnet-base-dot-v1"),

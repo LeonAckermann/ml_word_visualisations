@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import csv
 import pandas as pd
-from bertopic.representation import KeyBERTInspired
+#from bertopic.representation import KeyBERTInspired
 from sentence_transformers import SentenceTransformer
 from flair.embeddings import TransformerDocumentEmbeddings
 from umap import UMAP
@@ -19,6 +19,8 @@ import os
 
 embedding_models = {"miniLM":SentenceTransformer("all-MiniLM-L6-v2"),
                     #"roberta": TransformerDocumentEmbeddings('roberta-base'),
+                    #"roberta-large": TransformerDocumentEmbeddings('roberta-large'),
+                    "multilingual-e5-large": SentenceTransformer("intfloat/multilingual-e5-large"),
                     "mpnet": SentenceTransformer("all-mpnet-base-v2"),
                     "multi-mpnet": SentenceTransformer("multi-qa-mpnet-base-dot-v1"),
                     "distilroberta": SentenceTransformer("all-distilroberta-v1")}

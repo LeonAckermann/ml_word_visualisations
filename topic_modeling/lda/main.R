@@ -1,3 +1,11 @@
+if (!require(LDAvis)) {
+  install.packages("LDAvis")
+}
+if (!require(servr)) {
+  install.packages("servr")
+}
+
+
 library(textmineR)
 library(tidyverse)
 library(mallet)
@@ -6,7 +14,15 @@ library(tokenizers)
 library(reticulate)
 source("./topic_modeling/lda/utils.R")
 source("./topic_modeling/lda/inferencer.R")
-use_condaenv("bert_topic", required = TRUE)
+#use_condaenv("bert_topic", required = TRUE)
+use_condaenv("textrpp_condaenv", required = TRUE) # This is the conda env of the R-Text package.
+packages <- c("bertopic", "flair")
+for (package in packages) {
+  if (!py_module_available(package)) {
+    # Install the package if it's not available
+    py_install(package,envname="textrpp_condaenv", pip=TRUE)
+  }
+}
 source_python("./topic_modeling/bert_topic/bert_topic.py")
 source_python("./topic_modeling/Neural_Topic_models/ETM_R_integration.py")
 library(text2vec)
@@ -169,7 +185,8 @@ get_dtm <- function(data_dir, # provide relative directory path to data
   #} else {
   #  text_cols= text[c(id_col,data_col,cor_var, group_var)] #, "minidep_scale", "miniGAD_scale")] # select columns
   #}
-  text_cols <- text
+  #text_cols <- text
+  text_cols <- text[,c(id_col,data_col,cor_var, group_var)]
   text_cols <- text_cols[complete.cases(text_cols), ] # remove rows without values
   text_cols = text_cols[sample(1:nrow(text_cols)), ] # shuffle
   
@@ -393,6 +410,8 @@ get_neuralTopic_model <- function(taskname,
 get_lda_model <- function(model_type="mallet",
                           dtm,
                           num_topics,
+                          alpha.sum = 5,
+                          beta = 0.01,
                           num_top_words,
                           num_iterations,
                           seed,
@@ -410,8 +429,11 @@ get_lda_model <- function(model_type="mallet",
     } else if (model_type == "mallet"){
       model <- get_mallet_model(dtm = dtm,
                                 num_topics = num_topics,
+                                alpha.sum = alpha.sum,
+                                beta = beta,
                                 num_top_words = num_top_words,
-                                num_iterations = num_iterations)
+                                num_iterations = num_iterations,
+                                seed = seed)
     }
     
     model$summary <- data.frame(topic = rownames(model$labels),
@@ -575,14 +597,18 @@ get_lda_test <- function(model,
 
 get_mallet_model <- function(dtm,
                              num_topics,
+                             alpha.sum = 5,
+                             beta = 0.01,
                              num_top_words, 
-                             num_iterations){
+                             num_iterations,
+                             seed = 42){
   # still to complete
   docs <- Dtm2Docs(dtm)
   
   model <- MalletLDA(num.topics = num_topics,
-                            alpha.sum = 5,
-                            beta = 0.01)
+                            alpha.sum = alpha.sum,
+                            beta = beta)
+  model$setRandomSeed(as.integer(seed))
   instances <- mallet.import(as.character(seq_along(docs)),
                              docs,
                              #"example_stoplist.csv",

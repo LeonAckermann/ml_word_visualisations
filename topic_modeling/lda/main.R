@@ -589,7 +589,7 @@ get_lda_test <- function(model,
                 p_value = test$p.value)
       write_csv(data.frame(df), paste0(save_dir, "/seed_", seed, "/textTrain_regression.csv"))
     }
-    saveRDS(preds, paste0(save_dir, "/seed_", seed, "/test_",test_method, ".rds"))
+    saveRDS(test, paste0(save_dir, "/seed_", seed, "/test_",test_method, ".rds"))
     print(paste0("The test was saved in: ", save_dir,"/seed_", seed, "/test_",test_method, ".rds"))
   }
   return(test)

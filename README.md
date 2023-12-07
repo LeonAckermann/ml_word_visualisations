@@ -174,3 +174,8 @@ test <- get_lda_test(model=model,
                     seed=seed,
                     save_dir=save_dir)
 ```
+
+#### 5. Change the background color
+```
+p + theme(panel.background = element_rect(fill = 'lightblue', color = 'purple'),
+```
